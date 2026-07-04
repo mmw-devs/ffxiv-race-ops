@@ -7,6 +7,11 @@ description: >
 
 # add-news
 
+## 前置条件
+
+在开发模式（/dev）下，此 Skill 不可用。如触发时处于开发模式，回复：
+"当前开发模式（/dev），无法操作 data.js。请 /ops 返回运营模式后操作。"
+
 ## 输入
 
 运营自然语言，例如：
@@ -36,76 +41,9 @@ description: >
 ### Step 3: 修改
 
 在 `data.js` 的 `news[]` 数组头部插入新条目。
+- `id`：基于已有最大 id + 1（如现有 `n1`~`n5`，新 id 为 `n6`）
+- `time`：当前时间，格式 `YYYY-MM-DD HH:mm`
 
-### Step 4: 提交到预览分支并创建 PR
+### Step 4: 提交
 
-**重要：此时只是推到 `content/*` 分支并创建 PR——生产站还不会变。**
-
-```bash
-git checkout -b content/add-news-<id>
-git add data.js
-git commit -m "content: add news - <标题>"
-git push -u origin content/add-news-<id>
-```
-
-push 成功后，创建 PR：
-
-```bash
-gh pr create \
-  --title "content: add news - <标题>" \
-  --body "## 变更摘要
-
-- **标题**: <标题>
-- **时间**: <YYYY-MM-DD HH:mm>
-- **紧急**: <是/否>
-
-## 预览
-
-预览链接将由 Cloudflare Pages 自动生成。
-
----
-🤖 由 PI Agent 自动提交" \
-  --base main
-```
-
-### Step 5: ⚠️ 输出合并提醒（必须执行，不可跳过）
-
-PR 创建完成后，必须输出：
-
-```
-✅ PR 已创建：#<N> — https://github.com/<owner>/<repo>/pull/<N>
-   预览链接：https://<净化后的分支名>.ffxiv-race-stats.pages.dev
-   （分支名净化规则：/ → -，全小写，取前 28 字符）
-   CI 校验：https://github.com/<owner>/<repo>/actions/runs/<run_id>
-
-⚠️ 生产站 https://ffxiv-race-stats.pages.dev 还没有更新。
-   请打开预览链接确认无误后，回复"合并"。
-   我会用 Squash Merge 把改动合入 main 并自动部署到生产站。
-```
-
-**不收到运营回复"合并"，绝对不继续。**
-
-### Step 6: 合并（收到运营确认后执行）
-
-收到运营确认后，先确认 CI 已通过：
-
-```bash
-gh pr view <PR_NUMBER> --json state,statusCheckRollup
-```
-
-CI 通过后执行 Squash Merge：
-
-```bash
-gh pr merge <PR_NUMBER> --squash --delete-branch
-```
-
-如果 CI 未通过：
-1. 读取 CI 错误日志：`gh run view <run_id> --log`
-2. 诊断并修复 `data.js`
-3. Commit + push 到同一 `content/*` 分支（PR 自动更新，CI 自动重跑）
-4. 回到 Step 5，等待运营再次确认
-
-合并成功后汇报：
-```
-✅ 已 Squash Merge 到 main，生产站即将更新：https://ffxiv-race-stats.pages.dev
-```
+修改完成后，调用 **`content-pr` Skill** 完成分支创建、PR 提交和后续合并流程。
