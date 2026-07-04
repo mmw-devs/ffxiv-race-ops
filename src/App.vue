@@ -19,8 +19,10 @@
       <p>此区域预留给未来的副本攻略窗口，当前版本暂不实现。</p>
     </section>
     <AppFooter :eventName="meta.eventName" />
-    <!-- 全屏遮罩层（展开排名/赞助/公告时显示） -->
-    <div class="ranking-overlay" :class="{ 'is-on': expandedId !== null }" @click="expandedId = null"></div>
+    <!-- 全屏遮罩层（仅展开时渲染，避免 position:fixed 覆盖问题） -->
+    <Teleport to="body">
+      <div v-if="expandedId !== null" class="ranking-overlay" @click="expandedId = null"></div>
+    </Teleport>
   </template>
 </template>
 
@@ -83,13 +85,17 @@ onMounted(async () => {
 function startEntrySequence() {
   const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   const entries = document.querySelectorAll('.anim-entry')
-  if (prefersReduced) {
+  if (prefersReduced || entries.length === 0) {
     entries.forEach(el => el.classList.add('is-visible'))
     return
   }
   entries.forEach((el, i) => {
     setTimeout(() => el.classList.add('is-visible'), i * 70)
   })
+  // 安全回退：最多 3 秒后强制全部显示
+  setTimeout(() => {
+    entries.forEach(el => el.classList.add('is-visible'))
+  }, 3000)
 }
 </script>
 
@@ -121,13 +127,12 @@ function startEntrySequence() {
 
 /* 全屏遮罩 */
 .ranking-overlay {
-  position: fixed; inset: 0;
+  position: fixed; inset: 0; z-index: 900;
   background: rgba(0,0,0,0.55);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-  z-index: 900; opacity: 0; pointer-events: none;
-  transition: opacity 0.3s ease;
+  animation: overlay-in 0.3s ease;
 }
-.ranking-overlay.is-on { opacity: 1; pointer-events: auto; }
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
 
 /* 入场动画 */
 .anim-entry {
@@ -137,7 +142,7 @@ function startEntrySequence() {
 .anim-entry.is-visible { opacity: 1; transform: translateY(0); }
 
 @media (prefers-reduced-motion: reduce) {
-  .ranking-overlay { transition-duration: 0.01ms !important; }
+  .ranking-overlay { animation: none; }
   .anim-entry { opacity: 1; transform: none; transition: none; }
 }
 </style>
