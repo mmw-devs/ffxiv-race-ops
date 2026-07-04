@@ -1,18 +1,4 @@
-# 开发侧代码 — 开发者拥有
-*.html           @ffxiv-race-stats/dev-team
-*.css            @ffxiv-race-stats/dev-team
-*.js             @ffxiv-race-stats/dev-team
-.github/**       @ffxiv-race-stats/dev-team
-# CI 防线规则 — 项目拥有者审批（必须通过 weunimix review 才能修改）
-.github/workflows/validate.yml     @weunimix
-schema/**        @ffxiv-race-stats/dev-team
-.pi/**           @ffxiv-race-stats/dev-team
-CLAUDE.md        @ffxiv-race-stats/dev-team
-README.md        @ffxiv-race-stats/dev-team
-docs/**          @ffxiv-race-stats/dev-team
+# 推荐审批人（非强制，Branch Protection 已关闭 CODEOWNERS review）
+*    @weunimix
 
-# 结构常量 — 开发者拥有（白名单、值域、显示常量）
-constants.js     @ffxiv-race-stats/dev-team
-
-# 数据层 — 运营侧拥有
-data.js          @ffxiv-race-stats/ops-agent
+# data.js → content PR 由 race-ops-bot GitHub App 创建 + CI 校验通过后自动合并
