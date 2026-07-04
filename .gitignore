@@ -25,3 +25,4 @@ error.log
 .pi/settings.json
 dist/
 .astro/
+docs/relay-station-plan.md
