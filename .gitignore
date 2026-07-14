@@ -15,6 +15,9 @@ Thumbs.db
 # Backup files
 *.bak
 
+# Dependencies
+node_modules/
+
 # Static server logs (if any)
 access.log
 error.log
