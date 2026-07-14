@@ -15,13 +15,22 @@ export function useTimer(startTimeStr) {
   const elapsed = ref('+00:00:00')
   let timer = null
   const startTime = new Date(startTimeStr).getTime()
+  const isValid = !isNaN(startTime)
 
   function tick() {
+    if (!isValid) {
+      elapsed.value = '--:--:--'
+      return
+    }
     const ms = Date.now() - startTime
     elapsed.value = formatElapsed(ms > 0 ? ms : 0)
   }
 
   onMounted(() => {
+    if (!isValid) {
+      elapsed.value = '--:--:--'
+      return
+    }
     tick()
     timer = setInterval(tick, 1000)
   })
