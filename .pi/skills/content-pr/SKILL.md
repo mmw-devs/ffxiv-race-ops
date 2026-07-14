@@ -24,10 +24,10 @@ description: >
 PR 创建后，**只允许输出以下内容**，然后**本轮工作结束**：
 
 ```
-✅ PR 已创建：#N — https://github.com/ffxiv-race-stats/ffxiv-race-stats/pull/N
+✅ PR 已创建：#N — https://github.com/mmw-dev/ffxiv-race-stats/pull/N
    预览链接：https://<净化分支名>.ffxiv-race-stats.pages.dev
    净化规则：/ → -，全小写，取前 28 字符
-   CI 校验：https://github.com/ffxiv-race-stats/ffxiv-race-stats/actions
+   CI 校验：https://github.com/mmw-dev/ffxiv-race-stats/actions
 
 ⚠️ 生产站 https://ffxiv-race-stats.pages.dev 还没有更新。
    请打开预览链接确认后，回复"合并"。
