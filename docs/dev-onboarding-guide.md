@@ -357,7 +357,7 @@ mkdir -p ~/.pi/agent
 
 ```bash
 # 克隆到本地
-git clone https://github.com/mmw-dev/ffxiv-race-stats.git
+git clone https://github.com/mmw-devs/ffxiv-race-stats.git
 cd ffxiv-race-stats
 
 # 安装依赖（只需一次）
