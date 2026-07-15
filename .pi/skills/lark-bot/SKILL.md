@@ -1,75 +1,53 @@
 ---
 name: lark-bot
 description: >
-  飞书 Bot 消息收发。当运营要求启动/停止飞书 Bot、查看 Bot 收到的消息、或 Bot 自动回复相关操作时触发。
-  触发词：启动 Bot、停止 Bot、Bot 回复、飞书消息、lark bot。
+  飞书 Bot — pi RPC 代理。将飞书消息转发给 PI Agent，将 Agent 回复发回飞书。
+  触发词：飞书消息、Bot 回复、启动 Bot、停止 Bot。
 ---
 
-# lark-bot — 飞书 Bot 消息收发（基于 @larksuite/cli）
+# lark-bot — 飞书 Bot（pi RPC 代理）
 
 ## 架构
 
 ```
-飞书用户 → 发消息 → 飞书服务器 → WebSocket 推送 → lark-cli event consume
-                                                       ↓ stdout NDJSON
-                                                  feishu-bot.sh 守护进程
-                                                       ↓
-                                                  回复消息（API）
+飞书用户 ──消息──→ lark-cli event consume
+                        │
+                   lark-bot.ts (过滤/清洗/翻译)
+                        │
+                   pi --mode rpc (PI Agent)
+                        │
+                   lark-bot.ts (提取回复)
+                        │
+                   lark-cli im +messages-reply ──→ 飞书用户
 ```
 
-无 MCP Server、无 WebSocket SDK 依赖。仅需 `@larksuite/cli` + 一个 bash 守护进程。
-
-## 前置条件
-
-1. `@larksuite/cli` 已安装并配置 profile（`lark-cli profile use <name>`）
-2. 应用已在飞书开发者后台配置 `im.message.receive_v1` 事件
-3. WSL 环境需挂代理：`HTTP_PROXY=http://172.28.176.1:7890`（Clash）
+**lark-bot 不持有一行业务逻辑。** 只做三件事：
+1. 接收飞书事件 → 清洗为 agent 可读格式
+2. 通过 pi RPC 协议发送 prompt
+3. 提取 agent 回复 → 发回飞书
 
 ## 命令
 
-### 启动 Bot
-
 ```bash
-nohup bash .pi/scripts/feishu-bot.sh > /tmp/feishu-bot.log 2>&1 &
+# 启动
+tsx .pi/scripts/lark-bot.ts &
+
+# 停止
+kill $(cat /tmp/lark-bot.pid)
 ```
 
-- 自动清理残留 consumer
-- 启动 `event consume im.message.receive_v1`
-- 对每条收到的消息自动回复 "收到: <原文>"
-- 日志输出到 `/tmp/feishu-bot.log`
+## 行为
 
-### 停止 Bot
+| 场景 | 行为 |
+|------|------|
+| 私聊消息 | 转发给 agent |
+| 群聊消息（未 @Bot） | 忽略 |
+| 群聊消息（@Bot） | 去除 @提及后转发给 agent |
+| 非文本消息 | 忽略 |
 
-```bash
-pkill -f "feishu-bot.sh" && pkill -f "lark-cli.*event consume"
-```
+## 前置条件
 
-### 查看状态
-
-```bash
-lark-cli event status
-```
-
-### 手动发消息
-
-```bash
-lark-cli api POST /open-apis/im/v1/messages \
-  --params '{"receive_id_type":"chat_id"}' \
-  --data '{"receive_id":"<chat_id>","msg_type":"text","content":"{\"text\":\"<消息>\"}"}'
-```
-
-## 自定义回复逻辑
-
-编辑 `.pi/scripts/feishu-bot.sh` 中 `# ── 回复逻辑 ──` 部分。
-可将事件转发给 PI Agent 处理，替代简单 echo：
-
-```bash
-# 示例：转发给 PI Agent（通过 intercom）
-pi-intercom send --session main --message "飞书消息: $content (chat: $chat_id)"
-```
-
-## 注意事项
-
-- `event consume` 的总线守护进程在无 consumer 连接 30 秒后自动退出
-- `feishu-bot.sh` 的 `while read` 循环会持续保持 consumer 连接
-- 飞书事件投递有 10-15 秒延迟，属正常现象
+- `@larksuite/cli` 已安装
+- `pi` 已安装并可执行（`pi --mode rpc`）
+- `tsx` 已安装
+- 飞书应用已配置 `im.message.receive_v1` 订阅
