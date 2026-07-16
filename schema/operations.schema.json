@@ -1,0 +1,55 @@
+{
+  "$id": "operations.schema.json",
+  "title": "操作日志",
+  "description": "运营 Agent 每次 data.json 修改时嵌入 commit message 的结构化操作日志格式。",
+  "type": "object",
+  "required": ["operator", "timestamp", "action", "changes"],
+  "properties": {
+    "operator": {
+      "type": "string",
+      "description": "发起操作的运营人员标识符（飞书账号或姓名拼音），须在 OPERATOR_WHITELIST 中"
+    },
+    "timestamp": {
+      "type": "string",
+      "description": "操作时间，ISO 8601 UTC 格式"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "updateTeam",
+        "addNews",
+        "addBroadcaster",
+        "updateMeta",
+        "updateNotices",
+        "updateSponsors",
+        "seasonInit"
+      ],
+      "description": "操作类型，与 Skill 一一对应"
+    },
+    "target": {
+      "type": "string",
+      "description": "目标对象标识，如 t1、meta、news[new]、broadcaster[b1]"
+    },
+    "changes": {
+      "type": "array",
+      "minItems": 1,
+      "description": "字段变更列表",
+      "items": {
+        "type": "object",
+        "required": ["field", "from", "to"],
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "变更字段的 JSON 路径，如 teams[0].bossHP"
+          },
+          "from": {
+            "description": "变更前值（JSON 原生类型：string | number | boolean | null）"
+          },
+          "to": {
+            "description": "变更后值（JSON 原生类型：string | number | boolean | null）"
+          }
+        }
+      }
+    }
+  }
+}

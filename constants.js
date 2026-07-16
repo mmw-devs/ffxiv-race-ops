@@ -22,3 +22,24 @@ const VALID_STATUSES = ["upcoming", "live", "ended"];
 const REQUIRED_TOP_KEYS = ["meta", "teams", "news", "broadcasters", "notices", "sponsors"];
 const TEAM_PLAYER_COUNT = 8;
 const SCHEMA_VERSION = 1;
+
+// ── 操作人白名单 ──────────────────────────────────────────────
+// 允许发起数据修改的运营人员（飞书账号 ID 或标识符）。
+// Agent 在生成操作日志时填入 operator 字段，CI 据此校验权限。
+// 新增运营人员请修改此处，校验逻辑自动同步。
+
+const OPERATOR_WHITELIST = [
+  "weunimix",
+  // 在此添加更多运营人员
+];
+
+// 合法的 action 类型（与 Skill 对应）
+const VALID_ACTIONS = [
+  "updateTeam",
+  "addNews",
+  "addBroadcaster",
+  "updateMeta",
+  "updateNotices",
+  "updateSponsors",
+  "seasonInit"
+];

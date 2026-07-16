@@ -49,11 +49,24 @@ description: >
 
 **PHASE_ORDER 来源：** `PHASE_ORDER` 等白名单常量定义在 `constants.js`（开发者维护），Agent 不可修改。校验时以 `constants.js` 中的值为准。
 
+## 操作日志
+
+每次修改 `data.js` 并 commit 时，必须在 commit message 中嵌入结构化 JSON 日志块。
+格式和规范详见 `.pi/skills/content-pr/SKILL.md` § 操作日志规范。
+
+CI 将对操作日志进行四项校验：
+1. 日志存在 — commit message 必须包含 JSON 日志块
+2. JSON 格式正确 — 可解析，`operator`、`timestamp`、`action`、`changes` 字段完整
+3. 修改一致性 — 日志中的 `changes` 须与实际 `data.js` diff 一致
+4. 操作人权限 — `operator` 在 `constants.js` 的 `OPERATOR_WHITELIST` 中
+
+全部通过 → CI 绿色 → 可合并。任一失败 → CI 红色 → 阻断合并。
+
 ## CI 失败处理
 
 如果 PR 的 CI 检查不通过：
 1. 读取 CI 错误日志：`gh run view <run_id> --log`
-2. 诊断问题（语法错误？值越界？文件范围违规？）
-3. 修复 `data.js`
+2. 诊断问题（语法错误？值越界？文件范围违规？操作日志缺失或不一致？）
+3. 修复 `data.js` 和/或 commit message
 4. Commit + push 到同一 `content/*` 分支（PR 自动更新，CI 自动重跑）
 5. 重新请求运营确认
