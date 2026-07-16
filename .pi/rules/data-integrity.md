@@ -1,15 +1,15 @@
 ---
 description: >
-  数据完整性规则。在每次 data.js 写入操作前后自动生效。
+  数据完整性规则。在每次 data.json 写入操作前后自动生效。
   检查范围：结构完整性、逻辑一致性、边界值、写入后自检。
 ---
 # 数据完整性规则
 
-此规则在每次 `data.js` 写入操作前后自动生效。
+此规则在每次 `data.json` 写入操作前后自动生效。
 
 ## 写入前自检
 
-每次修改 `data.js` 后，在 push 前完成以下检查：
+每次修改 `data.json` 后，在 push 前完成以下检查：
 
 ### 结构完整性
 
@@ -42,7 +42,7 @@ description: >
 
 ## 写入后自检
 
-- 重新读取 `data.js`，确认写入内容与意图一致
+- 重新读取 `data.json`，确认写入内容与意图一致
 - 运行 `node scripts/validate-data.js` 自检（确保通过 schema + 值域 + 业务规则三阶段校验）
 - 如有任一检查不通过，修复后重新自检，不通过不 push
 - push 后 CI（GitHub Actions）会再次运行相同检查作为独立防线
@@ -51,13 +51,13 @@ description: >
 
 ## 操作日志
 
-每次修改 `data.js` 并 commit 时，必须在 commit message 中嵌入结构化 JSON 日志块。
+每次修改 `data.json` 并 commit 时，必须在 commit message 中嵌入结构化 JSON 日志块。
 格式和规范详见 `.pi/skills/content-pr/SKILL.md` § 操作日志规范。
 
 CI 将对操作日志进行四项校验：
 1. 日志存在 — commit message 必须包含 JSON 日志块
 2. JSON 格式正确 — 可解析，`operator`、`timestamp`、`action`、`changes` 字段完整
-3. 修改一致性 — 日志中的 `changes` 须与实际 `data.js` diff 一致
+3. 修改一致性 — 日志中的 `changes` 须与实际 `data.json` diff 一致
 4. 操作人权限 — `operator` 在 `constants.js` 的 `OPERATOR_WHITELIST` 中
 
 全部通过 → CI 绿色 → 可合并。任一失败 → CI 红色 → 阻断合并。
@@ -67,6 +67,6 @@ CI 将对操作日志进行四项校验：
 如果 PR 的 CI 检查不通过：
 1. 读取 CI 错误日志：`gh run view <run_id> --log`
 2. 诊断问题（语法错误？值越界？文件范围违规？操作日志缺失或不一致？）
-3. 修复 `data.js` 和/或 commit message
+3. 修复 `data.json` 和/或 commit message
 4. Commit + push 到同一 `content/*` 分支（PR 自动更新，CI 自动重跑）
 5. 重新请求运营确认

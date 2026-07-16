@@ -174,7 +174,7 @@ for (let i = 0; i < commitBlocks.length; i++) {
 
   if (logs.length === 0) {
     fail(`commit ${shortHash} commit message 中未找到结构化操作日志块`);
-    console.log(`  提示：请在 commit message 中添加 JSON 日志块，格式见 docs/operations-system-design.md`);
+    console.log(`  提示：请在 commit message 中添加 JSON 日志块，格式见 .pi/skills/content-pr/SKILL.md`);
     continue;
   }
 
