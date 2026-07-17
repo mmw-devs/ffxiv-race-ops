@@ -43,3 +43,19 @@ const VALID_ACTIONS = [
   "updateSponsors",
   "seasonInit"
 ];
+
+// Node.js 环境导出（浏览器环境 module 未定义，静默跳过）
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    PHASE_ORDER,
+    ROLE_COLORS,
+    VALID_REGIONS,
+    VALID_ROLES,
+    VALID_STATUSES,
+    REQUIRED_TOP_KEYS,
+    TEAM_PLAYER_COUNT,
+    SCHEMA_VERSION,
+    OPERATOR_WHITELIST,
+    VALID_ACTIONS,
+  };
+}

@@ -13,9 +13,7 @@
  */
 
 const { execSync } = require("child_process");
-const fs = require("fs");
-const path = require("path");
-const vm = require("vm");
+const { OPERATOR_WHITELIST, VALID_ACTIONS } = require("../constants.js");
 
 // ══════════════════════════════════════════════════════════════
 // 工具
@@ -45,33 +43,8 @@ function ok(msg) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// 加载 constants.js（获取 OPERATOR_WHITELIST, VALID_ACTIONS）
+// 纯函数（从 constants.js 直接 require）
 // ══════════════════════════════════════════════════════════════
-
-console.log(`${BOLD}── 1. 加载 constants.js ──${RESET}`);
-
-const constantsPath = path.resolve(__dirname, "..", "constants.js");
-let constants;
-try {
-  const constantsRaw = fs.readFileSync(constantsPath, "utf-8");
-  const wrapped =
-    constantsRaw +
-    "\n;({ OPERATOR_WHITELIST, VALID_ACTIONS, PHASE_ORDER, VALID_REGIONS, VALID_ROLES, VALID_STATUSES });";
-  const script = new vm.Script(wrapped, { filename: "constants.js" });
-  constants = script.runInNewContext({});
-  ok("constants.js 加载成功");
-} catch (e) {
-  fail(`无法加载 constants.js: ${e.message}`);
-  process.exit(1);
-}
-
-const { OPERATOR_WHITELIST, VALID_ACTIONS } = constants;
-
-// ══════════════════════════════════════════════════════════════
-// 解析 commit message 中的 JSON 日志块
-// ══════════════════════════════════════════════════════════════
-
-console.log(`\n${BOLD}── 2. 提取操作日志 ──${RESET}`);
 
 /**
  * 从 commit message 中提取 JSON 操作日志块。
@@ -97,7 +70,8 @@ function extractLogFromMessage(message) {
 }
 
 /**
- * 校验单个操作日志对象的字段完整性
+ * 校验单个操作日志对象的字段完整性。
+ * 返回 true/false，通过全局 fail()/warn() 报告问题。
  */
 function validateLogFields(log, index) {
   const prefix = `commit #${index + 1}`;
@@ -124,6 +98,63 @@ function validateLogFields(log, index) {
 
   return valid;
 }
+
+/**
+ * 递归解析 JSON 对象的所有叶子路径。
+ * 返回 { "path.to.key": value } 的扁平映射。
+ */
+function flattenObject(obj, prefix = "") {
+  const result = {};
+  if (obj === null || typeof obj !== "object") {
+    result[prefix] = obj;
+  } else if (Array.isArray(obj)) {
+    // 对于数组，按索引展开
+    for (let i = 0; i < obj.length; i++) {
+      Object.assign(result, flattenObject(obj[i], `${prefix}[${i}]`));
+    }
+  } else {
+    for (const [key, val] of Object.entries(obj)) {
+      const newPrefix = prefix ? `${prefix}.${key}` : key;
+      Object.assign(result, flattenObject(val, newPrefix));
+    }
+  }
+  return result;
+}
+
+/**
+ * 比较两个扁平对象，生成变更列表。
+ * 返回 { field, from, to }[]
+ */
+function diffFlatObjects(oldFlat, newFlat) {
+  const changes = [];
+  const allKeys = new Set([...Object.keys(oldFlat), ...Object.keys(newFlat)]);
+
+  for (const key of allKeys) {
+    const oldVal = oldFlat[key];
+    const newVal = newFlat[key];
+
+    if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+      changes.push({
+        field: key,
+        from: oldVal,
+        to: newVal,
+      });
+    }
+  }
+
+  return changes;
+}
+
+// ══════════════════════════════════════════════════════════════
+// 主逻辑（仅直接执行时运行）
+// ══════════════════════════════════════════════════════════════
+
+function main() {
+
+console.log(`${BOLD}── 1. 加载 constants.js ──${RESET}`);
+ok("constants.js 加载成功 (require)");
+
+console.log(`\n${BOLD}── 2. 提取操作日志 ──${RESET}`);
 
 // 获取 PR 中所有非 merge commit 的 message
 let commitsOutput;
@@ -219,52 +250,6 @@ for (const entry of allLogs) {
 // ══════════════════════════════════════════════════════════════
 
 console.log(`\n${BOLD}── 4. 修改一致性校验 ──${RESET}`);
-
-/**
- * 递归解析 JSON 对象的所有叶子路径。
- * 返回 { "path.to.key": value } 的扁平映射。
- */
-function flattenObject(obj, prefix = "") {
-  const result = {};
-  if (obj === null || typeof obj !== "object") {
-    result[prefix] = obj;
-  } else if (Array.isArray(obj)) {
-    // 对于数组，按索引展开
-    for (let i = 0; i < obj.length; i++) {
-      Object.assign(result, flattenObject(obj[i], `${prefix}[${i}]`));
-    }
-  } else {
-    for (const [key, val] of Object.entries(obj)) {
-      const newPrefix = prefix ? `${prefix}.${key}` : key;
-      Object.assign(result, flattenObject(val, newPrefix));
-    }
-  }
-  return result;
-}
-
-/**
- * 比较两个扁平对象，生成变更列表。
- * 返回 { field, from, to }[]
- */
-function diffFlatObjects(oldFlat, newFlat) {
-  const changes = [];
-  const allKeys = new Set([...Object.keys(oldFlat), ...Object.keys(newFlat)]);
-
-  for (const key of allKeys) {
-    const oldVal = oldFlat[key];
-    const newVal = newFlat[key];
-
-    if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
-      changes.push({
-        field: key,
-        from: oldVal,
-        to: newVal,
-      });
-    }
-  }
-
-  return changes;
-}
 
 // 获取 data.json 在 base 和当前 HEAD 的版本
 let actualChanges = [];
@@ -410,4 +395,21 @@ if (errors === 0) {
     console.log(`${YELLOW}  ${warnings} 条提醒${RESET}`);
   }
   process.exit(1);
+}
+
+} // main() 结束
+
+// ══════════════════════════════════════════════════════════════
+// 导出 + 入口判断
+// ══════════════════════════════════════════════════════════════
+
+module.exports = {
+  extractLogFromMessage,
+  validateLogFields,
+  flattenObject,
+  diffFlatObjects,
+};
+
+if (require.main === module) {
+  main();
 }
