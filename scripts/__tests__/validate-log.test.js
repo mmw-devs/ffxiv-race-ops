@@ -338,4 +338,21 @@ describe("Schema 校验", () => {
     assert.ok(schema.required.includes("timestamp"));
     assert.ok(schema.required.includes("changes"));
   });
+
+  it("TEST-9c: Schema action.enum 与 constants.js VALID_ACTIONS 一致", () => {
+    const { VALID_ACTIONS } = require("../../constants.js");
+    const fs = require("fs");
+    const path = require("path");
+    const schemaPath = path.resolve(__dirname, "..", "..", "schema", "operations.schema.json");
+    const schema = JSON.parse(fs.readFileSync(schemaPath, "utf-8"));
+
+    const schemaActions = [...schema.properties.action.enum].sort();
+    const constActions = [...VALID_ACTIONS].sort();
+
+    assert.deepStrictEqual(
+      schemaActions,
+      constActions,
+      "schema 和 constants.js 的 action 列表不一致，请同步更新"
+    );
+  });
 });
