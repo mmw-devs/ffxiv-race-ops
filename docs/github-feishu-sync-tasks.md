@@ -114,3 +114,5 @@ lark-cli base +table-list --base-token <token>
 | T5 workflow | 15 分钟 |
 | T6-T7 验证 | 10 分钟 |
 | **合计** | ~75 分钟 |
+
+<!-- E2E PR 同步测试 — 此注释将在测试完成后移除 -->
