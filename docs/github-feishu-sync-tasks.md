@@ -9,7 +9,7 @@ T1 建表 ──→ T4 核心脚本 ──→ T5 workflow ──→ T7 测试
                 │
 T2 Token 确认   │
                 │
-T3 Secrets ────→ T6 全量同步
+T3 Secrets ────→ T6 全量同步（agent 操作）
 ```
 
 ## 任务清单
@@ -62,8 +62,8 @@ lark-cli base +table-list --base-token <token>
 |------|------|
 | `sync_issue <number>` | 拉取单个 issue → 查 Bitable 去重 → 创建或更新 |
 | `sync_pr <number>` | 同上，处理 PR |
-| `sync_all_issues` | 全量拉取所有 issue → 分批写入 |
-| `sync_all_prs` | 同上 |
+
+全量同步不在脚本中实现，由 PI Agent 介入操作（直接循环调用单条同步）。
 
 输入：从环境变量读取 Secrets。输出：`stdout` 日志。
 
@@ -73,13 +73,12 @@ lark-cli base +table-list --base-token <token>
 
 ### T5 — 编写 GitHub Actions Workflow
 
-**产出：** 3 个 workflow 文件。
+**产出：** 2 个 workflow 文件，均支持 event 触发 + workflow_dispatch 手动补同步。
 
 | 文件 | 触发 |
 |------|------|
-| `.github/workflows/sync-issue.yml` | `issues` 事件 |
-| `.github/workflows/sync-pr.yml` | `pull_request` 事件 |
-| `.github/workflows/sync-all.yml` | `workflow_dispatch` 手动触发 |
+| `.github/workflows/sync-issue.yml` | `issues` 事件 + `workflow_dispatch` |
+| `.github/workflows/sync-pr.yml` | `pull_request` 事件 + `workflow_dispatch` |
 
 **预估：** 15 分钟
 
@@ -89,9 +88,9 @@ lark-cli base +table-list --base-token <token>
 
 **产出：** Issues 表和 PRs 表填充历史数据。
 
-手动触发 `sync-all` workflow，拉取所有现有 Issue/PR 写入飞书。
+由 agent 直接调用脚本逐条同步，无需单独 workflow。
 
-**预估：** 2 分钟
+**预估：** 5 分钟
 
 ---
 

@@ -28,15 +28,14 @@ GitHub Actions (issue_sync / pr_sync)
 
 ## 2. 触发方式
 
-三条 workflow，分工明确：
+两条 workflow，分工明确：
 
 | workflow | 触发源 | 用途 |
 |----------|--------|------|
-| `sync-issue.yml` | `issues: [opened, closed, reopened, labeled, unlabeled, assigned, unassigned]` | 日常增量 |
-| `sync-pr.yml` | `pull_request: [opened, closed, reopened, labeled, unlabeled, assigned, unassigned]` | 日常增量 |
-| `sync-all.yml` | `workflow_dispatch` | 首次全量导入 / 修复不一致 |
+| `sync-issue.yml` | `issues` 事件 + `workflow_dispatch` | Issue 增量同步 |
+| `sync-pr.yml` | `pull_request` 事件 + `workflow_dispatch` | PR 增量同步 |
 
-**为什么不合并成一个 workflow？** Issue 和 PR 的 event payload 结构不同（`issue.number` vs `pull_request.number`），分开处理逻辑更清晰。
+**全量同步**不在脚本中实现，由 PI Agent 介入操作，降低脚本复杂度。
 
 ## 3. Bitable 表结构
 
@@ -101,12 +100,10 @@ EXISTING=$(lark-cli base +record-list \
 ```
 .github/
 ├── workflows/
-│   ├── sync-issue.yml       # issue 事件触发
-│   ├── sync-pr.yml          # PR 事件触发
-│   └── sync-all.yml         # 手动全量同步
+│   ├── sync-issue.yml       # issue 事件 + 手动触发
+│   └── sync-pr.yml          # PR 事件 + 手动触发
 └── scripts/
-    ├── sync-gh-to-bitable.sh   # 核心同步脚本
-    └── sync-all.sh             # 全量同步脚本
+    └── sync-gh-to-bitable.sh   # 核心同步脚本（单条增/改）
 ```
 
 ## 5. 凭证管理

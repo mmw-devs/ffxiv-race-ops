@@ -4,8 +4,8 @@
 # 用法:
 #   sync-gh-to-bitable.sh issue <number>    同步单个 Issue
 #   sync-gh-to-bitable.sh pr <number>       同步单个 PR
-#   sync-gh-to-bitable.sh all-issues        全量同步所有 Issue
-#   sync-gh-to-bitable.sh all-prs           全量同步所有 PR
+#
+# 全量同步由 PI Agent 介入操作，不由此脚本负责。
 #
 # 环境变量（由 GitHub Actions Secrets 注入）:
 #   FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_BITABLE_TOKEN,
@@ -16,6 +16,8 @@ set -euo pipefail
 BASE_TOKEN="${FEISHU_BITABLE_TOKEN:?}"
 ISSUE_TABLE="${FEISHU_ISSUE_TABLE_ID:?}"
 PR_TABLE="${FEISHU_PR_TABLE_ID:?}"
+FEISHU_APP_ID="${FEISHU_APP_ID:?}"
+FEISHU_APP_SECRET="${FEISHU_APP_SECRET:?}"
 
 # lark-cli 路径（本地用项目内安装的，CI 用 npm ci 后的）
 LARK_CLI=".pi/npm/node_modules/@larksuite/cli/bin/lark-cli"
@@ -25,13 +27,19 @@ LARK_CLI=".pi/npm/node_modules/@larksuite/cli/bin/lark-cli"
 fmt_date() { echo "$1" | sed 's/T/ /; s/Z$//' | cut -c1-19; }
 
 # 查询 Bitable 中是否已存在某条记录（按 GitHub ID 去重）
-# 返回 record_id 或空
+# 返回 record_id，查询失败时返回空（当作新记录处理，不阻塞流程）
 find_by_github_id() {
   local table_id="$1" github_id="$2"
-  $LARK_CLI base +record-list \
+  local result
+  if result=$($LARK_CLI base +record-list \
     --base-token "$BASE_TOKEN" --table-id "$table_id" \
     --filter-json "{\"logic\":\"and\",\"conditions\":[[\"GitHub ID\",\"==\",\"$github_id\"]]}" \
-    --format json --as bot 2>/dev/null | jq -r '.data.items[0].record_id // ""'
+    --format json --as bot 2>&1); then
+    echo "$result" | jq -r '.data.items[0].record_id // ""'
+  else
+    echo "[lark-cli 查询失败，当作新记录处理]" >&2
+    echo ""
+  fi
 }
 
 # --- Issue 同步 ---
@@ -118,39 +126,12 @@ sync_pr() {
   echo "  ✓ 完成"
 }
 
-# --- 全量同步 ---
-sync_all_issues() {
-  echo "→ 全量同步 Issues ..."
-  local issues
-  issues=$(gh issue list --state all --limit 1000 --json number --jq '.[].number')
-  local count=0
-  for num in $issues; do
-    sync_issue "$num"
-    count=$((count + 1))
-  done
-  echo "✓ 共处理 $count 个 Issue"
-}
-
-sync_all_prs() {
-  echo "→ 全量同步 PRs ..."
-  local prs
-  prs=$(gh pr list --state all --limit 1000 --json number --jq '.[].number')
-  local count=0
-  for num in $prs; do
-    sync_pr "$num"
-    count=$((count + 1))
-  done
-  echo "✓ 共处理 $count 个 PR"
-}
-
 # --- 入口 ---
 case "${1:-}" in
-  issue)       sync_issue "${2:?缺少 Issue 编号}" ;;
-  pr)          sync_pr "${2:?缺少 PR 编号}" ;;
-  all-issues)  sync_all_issues ;;
-  all-prs)     sync_all_prs ;;
+  issue)  sync_issue "${2:?缺少 Issue 编号}" ;;
+  pr)     sync_pr "${2:?缺少 PR 编号}" ;;
   *)
-    echo "用法: $0 issue <number> | pr <number> | all-issues | all-prs"
+    echo "用法: $0 issue <number> | pr <number>"
     exit 1
     ;;
 esac
