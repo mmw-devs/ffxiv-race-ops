@@ -2,111 +2,145 @@
 
 > Issue #68 | 2026-07-19
 
-## 1. 架构
+## 1. 双轨架构
 
 ```
-GitHub Issue / PR Event
-        │
-        ▼
-GitHub Actions (issue_sync / pr_sync)
-        │
-        ├── gh issue view / gh pr view      ← 内置，无需凭证
-        │
-        ├── 格式化为 lark-cli JSON
-        │
-        └── lark-cli base +record-batch-create   ← FEISHU_APP_ID / FEISHU_APP_SECRET
-                  │
-                  ▼
-           飞书多维表格
+┌─────────────────────────────────────────────────────┐
+│                    主路径（自动）                      │
+│                                                     │
+│  GitHub Issue/PR Event                              │
+│       │                                             │
+│       ▼                                             │
+│  GitHub Actions Workflow                            │
+│       │                                             │
+│       ▼                                             │
+│  sync-gh-to-bitable.sh（端到端）                      │
+│       │                                             │
+│       ▼                                             │
+│  飞书多维表格                                        │
+└─────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────┐
+│                  接管路径（Agent）                     │
+│                                                     │
+│  开发者命令 Agent                                    │
+│       │                                             │
+│       ▼                                             │
+│  Agent source 脚本 → 调用独立函数                      │
+│       │                                             │
+│       ├── fetch_issue(68)     # 只拉数据              │
+│       ├── 分析 / 决策 / 修改                          │
+│       └── write_issue(...)    # 只写数据              │
+│       │                                             │
+│       ▼                                             │
+│  飞书多维表格                                        │
+└─────────────────────────────────────────────────────┘
 ```
 
-**三点说明：**
+**设计原则：**
 
-- **不经过 PI Agent**。这是纯数据管道，agent 在其中无智能价值。
-- **gh CLI 内置在 Actions runner 中**，无需额外配置，自动使用 workflow 的仓库上下文。
-- **lark-cli 已在项目 devDependencies 中**，Actions 执行 `npm ci` 后即可用。
+- **主路径不依赖 Agent**。日常增量由 GitHub Actions 自动完成，Agent 离线也能跑。
+- **接管路径可选**。全量同步、批量修复、数据清洗等特殊需求时，Agent 介入。
+- **接管时分层调用**。Agent 不重写逻辑，而是 source 导入后调用底层函数组合。
 
-## 2. 触发方式
+## 2. 脚本分层
 
-两条 workflow，分工明确：
+脚本按三层拆分，每层可独立调用：
 
-| workflow | 触发源 | 用途 |
-|----------|--------|------|
-| `sync-issue.yml` | `issues` 事件 + `workflow_dispatch` | Issue 增量同步 |
-| `sync-pr.yml` | `pull_request` 事件 + `workflow_dispatch` | PR 增量同步 |
+```
+┌──────────────────────────────────┐
+│         编排层 (orchestration)     │  ← GitHub Actions 用
+│  sync_issue()  sync_pr()         │    端到端：拉取 → 去重 → 写入
+│  sync_batch()                    │
+├──────────────────────────────────┤
+│         写入层 (write)            │  ← Agent 组合用
+│  write_issue()  write_pr()       │    接收结构化数据，写入 Bitable
+│  find_by_github_id()             │    去重查询
+├──────────────────────────────────┤
+│         获取层 (fetch)            │
+│  fetch_issue()  fetch_pr()       │    从 GitHub 拉取，返回 JSON
+│  fmt_date()                      │
+└──────────────────────────────────┘
+```
 
-**全量同步**不在脚本中实现，由 PI Agent 介入操作，降低脚本复杂度。
+| 层级 | 函数 | 职责 | 谁调用 |
+|------|------|------|--------|
+| 获取 | `fetch_issue` `fetch_pr` | gh CLI 拉取 → 输出 JSON | Agent / 编排层 |
+| 写入 | `write_issue` `write_pr` `find_by_github_id` | 接收字段 → 写入 Bitable | Agent / 编排层 |
+| 编排 | `sync_issue` `sync_pr` `sync_batch` | 串起获取+写入，加去重逻辑 | GitHub Actions |
 
-## 3. Bitable 表结构
+**Agent 接管示例：**
+
+```bash
+source .github/scripts/sync-gh-to-bitable.sh
+
+# 场景1：全量同步（批量容错）
+sync_batch issue $(gh issue list --state all --json number --jq '.[].number')
+
+# 场景2：先查后改（Agent 分析数据后决定）
+data=$(SYNC_OUTPUT=json fetch_issue 68)
+# Agent 检查 data，修改某个字段...
+write_issue "$modified_data"
+
+# 场景3：修复某个字段（只写不拉）
+write_issue '{"title":"修正标题","number":68,...}'
+```
+
+## 3. 触发方式
+
+| 路径 | 触发 | 用途 |
+|------|------|------|
+| `sync-issue.yml` | `issues` 事件 + `workflow_dispatch` | Issue 增量（自动） |
+| `sync-pr.yml` | `pull_request` 事件 + `workflow_dispatch` | PR 增量（自动） |
+| Agent 接管 | 开发者命令 | 全量同步、批量修复（手动） |
+
+## 4. Bitable 表结构
 
 双表设计：`Issues` + `Pull Requests`，分表而非合一，因为 PR 有多余字段（合并状态、源/目标分支）。
 
 ### Issues 表
 
-| 字段名 | 类型 | 说明 | 来源 |
-|--------|------|------|------|
-| 标题 | 文本 | Issue 标题 | `gh issue view --json title` |
-| 编号 | 数字 | `#67` | `gh issue view --json number` |
-| 状态 | 单选 | open / closed | `gh issue view --json state` |
-| 负责人 | 文本 | assignee login | `gh issue view --json assignees` |
-| 标签 | 多选 | label names | `gh issue view --json labels` |
-| 创建时间 | 日期 | ISO → `YYYY-MM-DD HH:mm:ss` | `gh issue view --json createdAt` |
-| 更新时间 | 日期 | | `gh issue view --json updatedAt` |
-| URL | 超链接 | 可直接点击 | `gh issue view --json url` |
-| GitHub ID | 文本 | **去重键**，如 `I_kwDO...` | `gh issue view --json id` |
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| 标题 | 文本 | Issue 标题 |
+| 编号 | 数字 | `#67` |
+| 状态 | 单选 | open / closed |
+| 负责人 | 文本 | assignee login |
+| 标签 | 多选 | label names |
+| 创建时间 | 日期 | `YYYY-MM-DD HH:mm:ss` |
+| 更新时间 | 日期 | |
+| URL | 超链接 | 可直接点击 |
+| GitHub ID | 文本 | **去重键**，如 `I_kwDO...` |
 
 ### Pull Requests 表
 
-| 字段名 | 类型 | 说明 | 来源 |
-|--------|------|------|------|
-| 标题 | 文本 | PR 标题 | `gh pr view --json title` |
-| 编号 | 数字 | `#69` | `gh pr view --json number` |
-| 状态 | 单选 | open / closed / merged | `gh pr view --json state, mergedAt` |
-| 作者 | 文本 | 提交者 login | `gh pr view --json author` |
-| 负责人 | 文本 | assignee login | `gh pr view --json assignees` |
-| 标签 | 多选 | label names | `gh pr view --json labels` |
-| 源分支 | 文本 | `feature/xxx` | `gh pr view --json headRefName` |
-| 目标分支 | 文本 | `main` | `gh pr view --json baseRefName` |
-| 创建时间 | 日期 | | `gh pr view --json createdAt` |
-| 更新时间 | 日期 | | `gh pr view --json updatedAt` |
-| URL | 超链接 | | `gh pr view --json url` |
-| GitHub ID | 文本 | **去重键** | `gh pr view --json id` |
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| 标题 | 文本 | PR 标题 |
+| 编号 | 数字 | `#69` |
+| 状态 | 单选 | open / closed / merged |
+| 作者 | 文本 | 提交者 login |
+| 负责人 | 文本 | assignee login |
+| 标签 | 多选 | label names |
+| 源分支 | 文本 | `feature/xxx` |
+| 目标分支 | 文本 | `main` |
+| 创建时间 | 日期 | |
+| 更新时间 | 日期 | |
+| URL | 超链接 | |
+| GitHub ID | 文本 | **去重键** |
 
-## 4. 核心脚本设计
-
-一套脚本，两种用途。核心思路：
-
-```
-拉 GitHub 数据 → 查 Bitable 现有记录 → 存在则更新，不存在则创建
-```
-
-### 同步逻辑
-
-```bash
-# 1. 拉取 GitHub 数据
-gh issue view "$ISSUE_NUMBER" --json number,title,state,labels,assignees,createdAt,updatedAt,url,id
-
-# 2. 去重检查（按 GitHub ID）
-EXISTING=$(lark-cli base +record-list \
-  --base-token "$BASE_TOKEN" --table-id "$TABLE_ID" \
-  --filter-json "{\"logic\":\"and\",\"conditions\":[[\"GitHub ID\",\"==\",\"$GITHUB_ID\"]]}" \
-  --format json)
-
-# 3. 存在 → batch-update；不存在 → batch-create
-```
-
-### 文件结构
+## 5. 文件结构
 
 ```
 .github/
 ├── workflows/
-│   ├── sync-issue.yml       # issue 事件 + 手动触发
-│   └── sync-pr.yml          # PR 事件 + 手动触发
+│   ├── sync-issue.yml          # issue 事件 + 手动触发
+│   └── sync-pr.yml             # PR 事件 + 手动触发
 └── scripts/
-    └── sync-gh-to-bitable.sh   # 核心同步脚本（单条增/改）
+    └── sync-gh-to-bitable.sh   # 三层函数 + CLI 入口
 ```
 
-## 5. 凭证管理
+## 6. 凭证管理
 
 | 凭证 | 存储位置 | 变量名 |
 |------|---------|--------|
@@ -115,43 +149,10 @@ EXISTING=$(lark-cli base +record-list \
 | Bitable App Token | GitHub Secrets | `FEISHU_BITABLE_TOKEN` |
 | Issue 表 ID | GitHub Secrets | `FEISHU_ISSUE_TABLE_ID` |
 | PR 表 ID | GitHub Secrets | `FEISHU_PR_TABLE_ID` |
-| GitHub Token | **Actions 内置** `${{ secrets.GITHUB_TOKEN }}` | 无需手动配置 |
+| GitHub Token | Actions 内置 | 无需手动配置 |
 
-## 6. 飞书应用权限
+## 7. 不做什么
 
-需在飞书开放平台为本应用开通：
-
-| 权限 | 用途 |
-|------|------|
-| `bitable:app` | 读写多维表格 |
-
-并将应用添加到目标多维表格的协作者中。
-
-## 7. 实现步骤
-
-| 步骤 | 内容 | 预估工作量 |
-|------|------|----------|
-| 1 | 飞书开放平台确认权限，手动创建 Issues/PRs 两个表格 | 10 分钟 |
-| 2 | GitHub Secrets 配置飞书凭证和表格 ID | 5 分钟 |
-| 3 | 编写 `sync-gh-to-bitable.sh` 核心脚本 | 主要工作量 |
-| 4 | 编写 `sync-all.sh` 全量同步脚本 | — |
-| 5 | 编写 workflow 文件 | — |
-| 6 | 手动触发 `sync-all` 完成首次导入 | 1 分钟 |
-| 7 | 测试：创建一个 Issue 验证自动同步 | 2 分钟 |
-
-## 8. 边界情况
-
-| 情况 | 处理 |
-|------|------|
-| 首次全量同步时表格已有部分数据 | 按 GitHub ID 去重，存在跳过，不存在创建 |
-| Issue 关闭后又 Reopen | 更新状态字段 |
-| PR 合并（merged） | 状态字段设 `merged`，非 `closed` |
-| 单次同步标签超过 200 个 | 不会发生（一个 Issue 通常 3-5 个标签） |
-| lark-cli batch_create 单次最多 200 条 | 全量同步时按 200 条分批 |
-| 事件触发和全量同步并发 | GitHub Actions 自动排队，不会同时跑 |
-
-## 9. 不做什么
-
-- **不做双向同步**（飞书改 → GitHub）：本期不需要，增加复杂度
-- **不做 GitHub Webhook 实时**：Actions event 已足够快（秒级触发）
-- **不做增量 diff 精细判断**：直接覆盖更新即可，Bitable 无 revision 概念
+- **不做双向同步**（飞书改 → GitHub）
+- **不做 GitHub Webhook 实时**：Actions event 已足够快
+- **不做增量 diff 精细判断**：直接覆盖更新即可
