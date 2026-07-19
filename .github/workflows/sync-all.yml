@@ -1,0 +1,53 @@
+name: Sync All to Feishu
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sync-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync all Issues
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          FEISHU_BITABLE_TOKEN: ${{ secrets.FEISHU_BITABLE_TOKEN }}
+          FEISHU_ISSUE_TABLE_ID: ${{ secrets.FEISHU_ISSUE_TABLE_ID }}
+          FEISHU_PR_TABLE_ID: ${{ secrets.FEISHU_PR_TABLE_ID }}
+        run: |
+          chmod +x .github/scripts/sync-gh-to-bitable.sh
+          .github/scripts/sync-gh-to-bitable.sh all-issues
+
+  sync-prs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync all PRs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          FEISHU_BITABLE_TOKEN: ${{ secrets.FEISHU_BITABLE_TOKEN }}
+          FEISHU_ISSUE_TABLE_ID: ${{ secrets.FEISHU_ISSUE_TABLE_ID }}
+          FEISHU_PR_TABLE_ID: ${{ secrets.FEISHU_PR_TABLE_ID }}
+        run: |
+          chmod +x .github/scripts/sync-gh-to-bitable.sh
+          .github/scripts/sync-gh-to-bitable.sh all-prs
