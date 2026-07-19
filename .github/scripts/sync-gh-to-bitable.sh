@@ -17,10 +17,9 @@ BASE_TOKEN="${FEISHU_BITABLE_TOKEN:?}"
 ISSUE_TABLE="${FEISHU_ISSUE_TABLE_ID:?}"
 PR_TABLE="${FEISHU_PR_TABLE_ID:?}"
 
-# lark-cli 路径
-LARK_CLI="npx lark-cli"
-export FEISHU_APP_ID="${FEISHU_APP_ID:?}"
-export FEISHU_APP_SECRET="${FEISHU_APP_SECRET:?}"
+# lark-cli 路径（本地用项目内安装的，CI 用 npm ci 后的）
+LARK_CLI=".pi/npm/node_modules/@larksuite/cli/bin/lark-cli"
+[ -x "$LARK_CLI" ] || LARK_CLI="./node_modules/.bin/lark-cli"
 
 # 日期格式转换: ISO 8601 → yyyy-MM-dd HH:mm:ss
 fmt_date() { echo "$1" | sed 's/T/ /; s/Z$//' | cut -c1-19; }
@@ -49,7 +48,7 @@ sync_issue() {
   num=$(echo "$data"   | jq -r '.number')
   state=$(echo "$data" | jq -r '.state' | tr '[:upper:]' '[:lower:]')
   assignees=$(echo "$data" | jq -r '[.assignees[].login] | join(", ")')
-  labels=$(echo "$data"   | jq -c '[.labels[].name]')
+  labels="null"  # TODO: 标签字段 options 为空，暂时跳过，需先预建标签选项
   created=$(fmt_date "$(echo "$data" | jq -r '.createdAt')")
   updated=$(fmt_date "$(echo "$data" | jq -r '.updatedAt')")
   url=$(echo "$data"     | jq -r '.url')
@@ -93,7 +92,7 @@ sync_pr() {
   fi
   author=$(echo "$data"    | jq -r '.author.login')
   assignees=$(echo "$data" | jq -r '[.assignees[].login] | join(", ")')
-  labels=$(echo "$data"    | jq -c '[.labels[].name]')
+  labels="null"  # TODO: 标签字段 options 为空，暂时跳过
   head_ref=$(echo "$data"  | jq -r '.headRefName')
   base_ref=$(echo "$data"  | jq -r '.baseRefName')
   created=$(fmt_date "$(echo "$data" | jq -r '.createdAt')")
