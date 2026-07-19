@@ -12,6 +12,7 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
 
@@ -22,11 +23,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Configure lark-cli
+        run: |
+          echo "${{ secrets.FEISHU_APP_SECRET }}" | npx lark-cli profile add \
+            --name ci-bot \
+            --app-id "${{ secrets.FEISHU_APP_ID }}" \
+            --app-secret-stdin \
+            --use \
+            --brand feishu
+
       - name: Sync Issue
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
-          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
           FEISHU_BITABLE_TOKEN: ${{ secrets.FEISHU_BITABLE_TOKEN }}
           FEISHU_ISSUE_TABLE_ID: ${{ secrets.FEISHU_ISSUE_TABLE_ID }}
           FEISHU_PR_TABLE_ID: ${{ secrets.FEISHU_PR_TABLE_ID }}

@@ -27,8 +27,8 @@
 #    write_issue "$data"
 #
 # === 环境变量 ===
-#   FEISHU_APP_ID, FEISHU_APP_SECRET, FEISHU_BITABLE_TOKEN,
-#   FEISHU_ISSUE_TABLE_ID, FEISHU_PR_TABLE_ID
+#   FEISHU_BITABLE_TOKEN, FEISHU_ISSUE_TABLE_ID, FEISHU_PR_TABLE_ID
+#   （lark-cli 鉴权通过 profile 管理，见 workflow 中的 Configure lark-cli 步骤）
 
 # ─── source 守卫 ────────────────────────────
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
@@ -40,8 +40,6 @@ fi
 BASE_TOKEN="${FEISHU_BITABLE_TOKEN:-}"
 ISSUE_TABLE="${FEISHU_ISSUE_TABLE_ID:-}"
 PR_TABLE="${FEISHU_PR_TABLE_ID:-}"
-FEISHU_APP_ID="${FEISHU_APP_ID:-}"
-FEISHU_APP_SECRET="${FEISHU_APP_SECRET:-}"
 
 # lark-cli 路径
 LARK_CLI=".pi/npm/node_modules/@larksuite/cli/bin/lark-cli"
@@ -233,8 +231,6 @@ fi
 : "${FEISHU_BITABLE_TOKEN:?未设置 FEISHU_BITABLE_TOKEN}"
 : "${FEISHU_ISSUE_TABLE_ID:?未设置 FEISHU_ISSUE_TABLE_ID}"
 : "${FEISHU_PR_TABLE_ID:?未设置 FEISHU_PR_TABLE_ID}"
-: "${FEISHU_APP_ID:?未设置 FEISHU_APP_ID}"
-: "${FEISHU_APP_SECRET:?未设置 FEISHU_APP_SECRET}"
 
 case "${1:-}" in
   issue)  sync_issue "${2:?缺少 Issue 编号}" ;;
