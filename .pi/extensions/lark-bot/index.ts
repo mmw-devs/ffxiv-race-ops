@@ -15,6 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const root = join(__dirname, "..", "..", ".."); // extensions/lark-bot → 项目根
 
+const IS_WIN = process.platform === "win32";
 let botProc: ChildProcess | null = null;
 
 export default function (pi: any) {
@@ -36,23 +37,36 @@ export default function (pi: any) {
 
     botProc = spawn(nodeBin, [tsxEntry, script], {
       cwd: root,
-      stdio: "ignore",
-      env: { ...process.env },
-      detached: true,
+      stdio: ["pipe", "ignore", "ignore"],  // stdin pipe: shutdown IPC
+      env: {
+        ...process.env,
+        LARK_PARENT_PID: String(process.pid),
+      },
+      detached: !IS_WIN,
+      windowsHide: IS_WIN,
     });
 
     botProc.on("exit", (code) => {
       console.error(`[lark-bot ext] Bot 进程退出 (code=${code})`);
       botProc = null;
     });
+
+    botProc.on("error", (err) => {
+      console.error(`[lark-bot ext] 启动失败: ${err.message}`);
+      botProc = null;
+    });
   });
 
   pi.on("session_shutdown", async (event: any) => {
-    if (event.reason !== "quit") return;
     if (!botProc) return;
 
-    console.error("[lark-bot ext] 停止飞书 Bot ...");
-    botProc.kill("SIGTERM");
+    console.error(`[lark-bot ext] 停止飞书 Bot (reason=${event.reason}) ...`);
+
+    // 通过 stdin 发送 shutdown 指令，让 lark-bot 自行 cleanup()
+    // error 监听防止 bot 已退出时 EPIPE 打穿 PI Agent
+    botProc.stdin.once("error", () => {});
+    botProc.stdin.write('{"type":"shutdown"}\n');
+
     botProc = null;
   });
 }
