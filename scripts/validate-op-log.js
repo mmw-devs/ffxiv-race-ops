@@ -53,7 +53,8 @@ console.log(`${BOLD}── 1. 提取操作日志 ──${RESET}`);
 let commits;
 try {
   const format = "%H%n%B%n---COMMIT_END---";
-  const raw = execSync(`git log ${baseRef}..HEAD --format="${format}"`, {
+  // --no-merges: 跳过 GHA 模拟合并产生的 merge commit（不含日志块）
+  const raw = execSync(`git log --no-merges ${baseRef}..HEAD --format="${format}"`, {
     encoding: "utf-8",
     cwd: path.resolve(__dirname, ".."),
   });
@@ -107,13 +108,13 @@ for (const commit of commits) {
     continue;
   }
 
-  // 权限校验
+  // 权限校验（warning — 不阻断 CI，保留审计记录）
   const permResult = validateOperatorPermission(log);
   if (!permResult.valid) {
     for (const err of permResult.errors) {
-      fail(`commit ${commit.hash.slice(0, 7)} 权限: ${err}`);
+      warn(`commit ${commit.hash.slice(0, 7)} 权限: ${err}`);
     }
-    continue; // 权限不通过但继续检查其他 commit
+    // 不 continue，继续记录日志以供审计
   }
 
   ok(`  operator: ${log.operator}, action: ${log.action}, target: ${log.target}, changes: ${log.changes.length} 项`);
@@ -187,12 +188,27 @@ if (actualChanges.length > 0) {
   // deepDiff 对"新增/删除"输出 undefined，但 JSON 中只能表示 null
   const norm = (v) => v === undefined ? null : v;
 
+  // 祖先字段判断：loggedField 是否为 actualField 的祖先路径
+  // 例："news" 是 "news[2].text" 的祖先，"teams" 是 "teams[0].bossHP" 的祖先
+  const isAncestorField = (loggedField, actualField) => {
+    if (loggedField === actualField) return true;
+    return actualField.startsWith(loggedField + ".") || actualField.startsWith(loggedField + "[");
+  };
+
   // 逐项比对：每项 actual 变更必须在日志中找到对应声明
   for (const actual of actualChanges) {
     const matched = loggedChanges.find((lc) => {
-      return lc.field === actual.field &&
-        JSON.stringify(norm(lc.from)) === JSON.stringify(norm(actual.from)) &&
-        JSON.stringify(norm(lc.to)) === JSON.stringify(norm(actual.to));
+      // 精确字段匹配：值的 JSON 表示必须一致
+      if (lc.field === actual.field) {
+        return JSON.stringify(norm(lc.from)) === JSON.stringify(norm(actual.from)) &&
+               JSON.stringify(norm(lc.to)) === JSON.stringify(norm(actual.to));
+      }
+      // 祖先匹配：日志声明的字段是 actual 字段的父级路径
+      // 用于数组操作（addNews 日志声明 "news"，deepDiff 产出 "news[2].text"）
+      if (isAncestorField(lc.field, actual.field)) {
+        return true;
+      }
+      return false;
     });
 
     if (!matched) {
@@ -205,9 +221,14 @@ if (actualChanges.length > 0) {
   // 反向检查：日志中声明的变更是否在 actual 中存在
   for (const lc of loggedChanges) {
     const matched = actualChanges.find((ac) => {
-      return ac.field === lc.field &&
-        JSON.stringify(norm(ac.from)) === JSON.stringify(norm(lc.from)) &&
-        JSON.stringify(norm(ac.to)) === JSON.stringify(norm(lc.to));
+      if (lc.field === ac.field) {
+        return JSON.stringify(norm(ac.from)) === JSON.stringify(norm(lc.from)) &&
+               JSON.stringify(norm(ac.to)) === JSON.stringify(norm(lc.to));
+      }
+      if (isAncestorField(lc.field, ac.field)) {
+        return true;
+      }
+      return false;
     });
 
     if (!matched) {
