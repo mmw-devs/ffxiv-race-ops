@@ -57,3 +57,11 @@ jobs:
           fi
           echo "文件范围检查通过：仅 public/data.json"
           echo "::endgroup::"
+
+      - name: Validate operation log (content/* PR only)
+        if: startsWith(github.head_ref, 'content/')
+        run: |
+          echo "::group::操作日志校验"
+          git fetch origin "${{ github.base_ref }}"
+          node scripts/validate-op-log.js "origin/${{ github.base_ref }}"
+          echo "::endgroup::"
