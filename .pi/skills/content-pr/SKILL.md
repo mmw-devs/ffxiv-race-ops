@@ -17,6 +17,28 @@ description: >
 
 1. 确认分支名：`content/<操作>-<目标>`，后缀 ≤ 20 ASCII 字符
 2. 获取 App token，创建 content 分支，修改 data.json，commit
+   - **commit message 强制格式**：
+     ```
+     content: <简短描述>
+
+     ````json
+     {
+       "operator": "<操作人标识>",
+       "timestamp": "<ISO 8601 UTC>",
+       "action": "<updateTeam|addNews|addBroadcaster|...>",
+       "target": "<目标ID>",
+       "changes": [
+         { "field": "<字段路径>", "from": <旧值>, "to": <新值> }
+       ]
+     }
+     ````
+     ```
+   - 日志块使用 4 反引号包围（```` ``` ````），`json` 语言标记
+   - `operator` 使用当前操作人的标识（飞书账号或用户名）
+   - `timestamp` 使用 ISO 8601 UTC 格式
+   - `changes` 数组每项包含 `field`（点分隔路径）、`from`（旧值）、`to`（新值）
+   - 如果一次 commit 修改多个字段，在 `changes` 数组中列出所有变更
+   - 调用业务 Skill 时，由业务 Skill 负责收集 changes 信息并传递给 content-pr
 3. Push 到 GitHub，`gh pr create --base main`（以 `race-ops-bot[bot]` 身份）
 
 ### 2. ⚠️ 汇报并硬停止（必须执行，不可跳过）
