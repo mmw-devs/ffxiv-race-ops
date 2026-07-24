@@ -21,6 +21,21 @@ const ACTION_TYPES = [
   "updateMeta",
 ];
 
+/**
+ * 操作风险等级
+ * high   — 不可逆或影响面大，权限不足时 CI 硬阻断
+ * medium — 核心运营操作，权限不足时 warn 不阻断
+ * low    — 新增内容（可再修改），权限不足时 warn 不阻断
+ */
+const ACTION_RISK_LEVELS = {
+  deleteBroadcaster: "high",
+  updateMeta:        "high",
+  updateTeam:        "medium",
+  updateBroadcaster: "medium",
+  addNews:           "low",
+  addBroadcaster:    "low",
+};
+
 // ══════════════════════════════════════════════════════════════
 // 权限校验
 // ══════════════════════════════════════════════════════════════
@@ -34,10 +49,19 @@ function isActionAllowed(action) {
 }
 
 /**
- * 校验操作人是否有权限执行指定操作类型
- * @param {string} operator
+ * 获取操作的风险等级
  * @param {string} action
- * @returns {{ valid: boolean, errors: string[] }}
+ * @returns {"high"|"medium"|"low"}
+ */
+function getActionRiskLevel(action) {
+  return ACTION_RISK_LEVELS[action] || "low";
+}
+
+/**
+ * 校验操作人是否有权限执行指定操作类型
+ * 返回值包含风险等级，供 CI 根据等级决定阻断/warn
+ * @param {object} log
+ * @returns {{ valid: boolean, errors: string[], riskLevel: "high"|"medium"|"low" }}
  */
 function validateOperatorPermission(log) {
   const errors = [];
@@ -47,7 +71,11 @@ function validateOperatorPermission(log) {
   if (!isActionAllowed(log.action)) {
     errors.push(`操作类型 "${log.action}" 不在允许列表中`);
   }
-  return { valid: errors.length === 0, errors };
+  return {
+    valid: errors.length === 0,
+    errors,
+    riskLevel: getActionRiskLevel(log?.action),
+  };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -201,9 +229,11 @@ module.exports = {
   // 常量
   OPERATOR_ALLOWLIST,
   ACTION_TYPES,
+  ACTION_RISK_LEVELS,
   // 权限
   isOperatorAllowed,
   isActionAllowed,
+  getActionRiskLevel,
   // 生成
   generateLog,
   formatCommitBlock,

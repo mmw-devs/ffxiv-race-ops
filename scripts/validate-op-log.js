@@ -108,13 +108,19 @@ for (const commit of commits) {
     continue;
   }
 
-  // 权限校验（warning — 不阻断 CI，保留审计记录）
+  // 权限校验：高风险操作（删除/改元信息）权限不足时硬阻断，中低风险 warn
   const permResult = validateOperatorPermission(log);
   if (!permResult.valid) {
+    const levelLabel = { high: "高风险", medium: "中风险", low: "低风险" }[permResult.riskLevel];
     for (const err of permResult.errors) {
-      warn(`commit ${commit.hash.slice(0, 7)} 权限: ${err}`);
+      if (permResult.riskLevel === "high") {
+        fail(`commit ${commit.hash.slice(0, 7)} 权限(${levelLabel}): ${err}`);
+      } else {
+        warn(`commit ${commit.hash.slice(0, 7)} 权限(${levelLabel}): ${err}`);
+      }
     }
-    // 不 continue，继续记录日志以供审计
+    // 高风险操作不继续记录日志（无法进入一致性比对）
+    if (permResult.riskLevel === "high") continue;
   }
 
   ok(`  operator: ${log.operator}, action: ${log.action}, target: ${log.target}, changes: ${log.changes.length} 项`);
