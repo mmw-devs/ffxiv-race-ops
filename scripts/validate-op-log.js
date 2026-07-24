@@ -132,8 +132,8 @@ if (allLogs.length === 0) {
 
 console.log(`\n${BOLD}── 3. 修改一致性校验 ──${RESET}`);
 
-// 获取 data.json 的实际 diff（JSON 格式）
-let actualDiff;
+// 获取 data.json 的实际变更
+// 阶段 3 的实际字段级对比由 deepDiff 完成（见下方）
 try {
   const diffOutput = execSync(
     `git diff ${baseRef}..HEAD -- public/data.json`,

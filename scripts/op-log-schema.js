@@ -8,8 +8,6 @@
 // 常量
 // ══════════════════════════════════════════════════════════════
 
-const LOG_SCHEMA_VERSION = 1;
-
 /** 允许的操作人列表（飞书账号/用户名） */
 const OPERATOR_ALLOWLIST = ["weunimix"];
 
@@ -22,16 +20,6 @@ const ACTION_TYPES = [
   "deleteBroadcaster",
   "updateMeta",
 ];
-
-/** 每个操作类型可修改的 data.json 字段白名单 */
-const ACTION_FIELD_ALLOWLIST = {
-  updateTeam:       ["phase", "bossHP", "isLive", "players"],
-  addNews:          ["news"],
-  addBroadcaster:   ["broadcasters"],
-  updateBroadcaster: ["broadcasters"],
-  deleteBroadcaster: ["broadcasters"],
-  updateMeta:       ["meta.status", "meta.title", "meta.startTime"],
-};
 
 // ══════════════════════════════════════════════════════════════
 // 权限校验
@@ -211,10 +199,8 @@ function parseLogFromMessage(commitMessage) {
 
 module.exports = {
   // 常量
-  LOG_SCHEMA_VERSION,
   OPERATOR_ALLOWLIST,
   ACTION_TYPES,
-  ACTION_FIELD_ALLOWLIST,
   // 权限
   isOperatorAllowed,
   isActionAllowed,
