@@ -20,7 +20,9 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PROJECT_DIR = join(__dirname, "..", "..");
-const CLI = join(PROJECT_DIR, ".pi/npm/node_modules/@larksuite/cli/bin/lark-cli");
+const CLI = process.platform === "win32"
+  ? join(PROJECT_DIR, ".pi/npm/node_modules/@larksuite/cli/bin/lark-cli.exe")
+  : join(PROJECT_DIR, ".pi/npm/node_modules/@larksuite/cli/bin/lark-cli");
 const PID_FILE = join(tmpdir(), "lark-bot.pid");
 const LOG_FILE = join(tmpdir(), "lark-bot.log");
 const PI_BIN = process.env.PI_BIN || "pi";
@@ -391,9 +393,15 @@ function startAllPi(): void {
 
   // 群聊 session — 通过 raw API 获取
   try {
+    console.log("执行群聊查询命令:", CLI);
+
     const out = execSync(
-      `"${CLI}" api GET '/open-apis/im/v1/chats?page_size=20' --as bot --format json`,
-      { timeout: 10000, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }
+      `${CLI} api get "/open-apis/im/v1/chats?page_size=20" --as bot --format json`,
+      {
+        timeout: 10000,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "pipe"]
+      }
     );
     const items = JSON.parse(out).data?.items || [];
     for (const c of items) {
