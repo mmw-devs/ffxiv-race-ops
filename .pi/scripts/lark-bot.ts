@@ -11,7 +11,7 @@
  * 用法:  tsx lark-bot.ts
  */
 
-import { spawn, ChildProcess, execSync } from "node:child_process";
+import { spawn, spawnSync, ChildProcess, execSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, appendFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -84,20 +84,25 @@ const EMOJI_DONE = "DONE";
 
 function addReaction(msgId: string, emoji: string): string | null {
   try {
-    const params = JSON.stringify({ message_id: msgId });
-    const data = JSON.stringify({ reaction_type: { emoji_type: emoji } });
-    const out = execSync(
-      `"${CLI}" im reactions create --as bot --params '${params}' --data '${data}'`,
-      { timeout: 5000, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }
-    );
-    return JSON.parse(out).data?.reaction_id ?? null;
+    const result = spawnSync(CLI, [
+      "im", "reactions", "create", "--as", "bot",
+      "--params", JSON.stringify({ message_id: msgId }),
+      "--data", JSON.stringify({ reaction_type: { emoji_type: emoji } }),
+      "--format", "json"
+    ], { timeout: 5000, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] });
+    if (result.error) return null;
+    return JSON.parse(result.stdout).data?.reaction_id ?? null;
   } catch { return null; }
 }
 
 function delReaction(msgId: string, reactionId: string): void {
   if (!reactionId) return;
-  const params = JSON.stringify({ message_id: msgId, reaction_id: reactionId });
-  try { execSync(`"${CLI}" im reactions delete --as bot --params '${params}'`, { timeout: 5000, encoding: "utf-8", stdio: "ignore" }); } catch {}
+  try {
+    spawnSync(CLI, [
+      "im", "reactions", "delete", "--as", "bot",
+      "--params", JSON.stringify({ message_id: msgId, reaction_id: reactionId })
+    ], { timeout: 5000, stdio: "ignore", encoding: "utf-8" });
+  } catch {}
 }
 
 // ═══════════════ 飞书回复 ═══════════════
@@ -172,7 +177,7 @@ async function pollActiveThreads(): Promise<void> {
   for (const chatId of knownChatIds) {
     try {
       const out = execSync(
-        `"${CLI}" im +chat-messages-list --as bot --chat-id "${chatId}" --order desc --page-size 5 --format json`,
+        `${CLI} im +chat-messages-list --as bot --chat-id "${chatId}" --order desc --page-size 5 --format json`,
         { timeout: 8000, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }
       );
       const items = JSON.parse(out).data?.items || [];
