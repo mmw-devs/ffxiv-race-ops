@@ -45,6 +45,36 @@ function log(msg: string) {
   try { appendFileSync(LOG_FILE, line + "\n"); } catch {}
 }
 
+// ═══════════════ 进程存活检测 ═══════════════
+/** Windows: tasklist /FO CSV /NH → 解析第二列 PID；非 Windows: process.kill(pid, 0) */
+function isAlive(pid: number): boolean {
+  if (IS_WIN) {
+    try {
+      const out = execSync(`tasklist /FI "PID eq ${pid}" /FO CSV /NH`, {
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: 3000,
+        encoding: "utf-8",
+      });
+      for (const line of out.trim().split("\n")) {
+        // CSV 格式: "进程名","PID","会话名","会话#","内存使用"
+        const cols = line.match(/"([^"]*)"/g);
+        if (cols && cols.length >= 2 && cols[1].replace(/"/g, "") === String(pid)) {
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ═══════════════ 表情 ═══════════════
 const EMOJI_READ = "WAVE";
 const EMOJI_THINKING = "THINKING";
@@ -375,15 +405,60 @@ function startAllPi(): void {
 }
 
 function main(): void {
+  // 启动期 PID 校验：使用 isAlive() 确保 Windows 下也能准确检测
   if (existsSync(PID_FILE)) {
-    try { process.kill(parseInt(readFileSync(PID_FILE, "utf-8").trim()), 0); log("已在运行"); process.exit(0); } catch {}
+    try {
+      const oldPid = Number(readFileSync(PID_FILE, "utf-8").trim());
+      if (oldPid > 0 && isAlive(oldPid)) {
+        log(`已在运行 pid=${oldPid}`);
+        process.exit(0);
+      }
+    } catch {}
   }
   writeFileSync(PID_FILE, String(process.pid));
   log("════════ lark-bot 启动 ════════");
   startAllPi();
   startLarkEvents();
+
+  // ═══════════════ 双 PID 看门狗 ═══════════════
+  // 监控 DIRECT_PARENT（tsx CLI）和 AGENT_PID（PI Agent），任一退出即清理
+  // 设计说明：依赖 OS PID 生命周期，未引入 PID identity 校验。
+  //          PID reuse 在 5s 间隔 + 现代 OS 分配策略下概率极低。
+  const DIRECT_PARENT = process.ppid;
+  const AGENT_PID = process.env.LARK_PARENT_PID
+    ? Number(process.env.LARK_PARENT_PID)
+    : null;
+
+  const monitoredPids: number[] = [DIRECT_PARENT];
+  if (AGENT_PID && AGENT_PID > 0 && AGENT_PID !== DIRECT_PARENT) {
+    monitoredPids.push(AGENT_PID);
+  }
+
+  log(`看门狗监控 PID=[${monitoredPids.join(", ")}]`);
+  const watchdog = setInterval(() => {
+    for (const pid of monitoredPids) {
+      if (!isAlive(pid)) {
+        log(`进程 ${pid} 已退出，lark-bot 自动终止`);
+        clearInterval(watchdog);
+        cleanup();
+        return;
+      }
+    }
+  }, 5000);
+
   process.on("SIGINT", cleanup);
   process.on("SIGTERM", cleanup);
+  process.on("exit", () => { try { unlinkSync(PID_FILE); } catch {} });
+
+  // ═══════════════ IPC shutdown ═══════════════
+  // extension 通过 stdin pipe 发送 {"type":"shutdown"}，触发优雅退出
+  // 解决 Windows 下 subprocess.kill("SIGTERM") = TerminateProcess（硬杀）
+  // 导致 cleanup() 和 process.on("exit") 都不执行、PID_FILE 残留的问题
+  process.stdin.on("data", (d: Buffer) => {
+    try {
+      if (JSON.parse(d.toString("utf-8")).type === "shutdown") cleanup();
+    } catch {}
+  });
 }
 
 function cleanup(): void {

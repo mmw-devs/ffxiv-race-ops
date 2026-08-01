@@ -26,16 +26,56 @@ Agent 必须始终明确处于 dev 或 ops 其中一种模式，不可模糊。�
         若 保存路径 非空 且 test -f 保存路径 失败:
             输出 "settings.json 中保存的 PEM 路径无效。"
 
-        输入 = 询问用户("请提供 PEM 私钥文件路径，无 PEM 请输入「无」：")
+        输出 ""
+        输出 "请选择 PEM 处理方式:"
+        输出 "  [P] 输入 PEM 路径（本地长期保存到 settings.json）"
+        输出 "  [J] 申请 JIT Installation Token（1 小时，GitHub 原生 TTL）"
+        输出 "  [N] 无需 PEM，继续本地 dev 模式"
+        输出 ""
 
-        若 输入 == "无":
-            保存路径 = 空
-        否则若 test -f 输入 成功:
-            保存路径 = 输入
-            写入 settings.json { pemPath: 输入 }
-            （注意：settings.json 已在 .gitignore 中，不会提交到仓库）
-        否则:
-            输出 "文件不存在，判定为本地环境。"
+        输入 = 询问用户("选择 [P/J/N]：").toUpperCase().trim()
+
+        若 输入 == "P":
+            新路径 = 询问用户("请输入 PEM 文件绝对路径：")
+            若 test -f 新路径 成功:
+                保存路径 = 新路径
+                写入 settings.json { pemPath: 新路径 }
+                （注意：settings.json 已在 .gitignore 中，不会提交到仓库）
+            否则:
+                输出 "文件不存在，判定为本地环境。"
+                保存路径 = 空
+
+        若 输入 == "J":
+            输出 "🔑 启动 JIT Installation Token 流程 ..."
+            输出 "   调用 .pi/scripts/get-jit-pem.ts"
+            输出 "   ⚠️ 注意: GitHub API 限制 TTL = 1 小时（原计划 10 分钟不可行）"
+            执行 tsx .pi/scripts/get-jit-pem.ts "developer /dev session"
+            若 退出码 == 0:
+                若 test -f /tmp/race-ops-jit-env.sh:
+                    source /tmp/race-ops-jit-env.sh
+                    输出 ""
+                    输出 "✓ JIT Token 已就绪"
+                    输出 "   GH_TOKEN: ${RACE_OPS_GH_TOKEN:0:20}..."
+                    输出 "   到期:     $JIT_EXPIRES_AT"
+                    输出 "   Run ID:   $JIT_RUN_ID"
+                    输出 ""
+                    输出 "   开发者现在可用此 token:"
+                    输出 "     export GH_TOKEN=..."
+                    输出 "     gh pr list   # 以 race-ops-bot 身份"
+                    输出 "     gh pr create --base main --head content/xxx ..."
+                    输出 ""
+                    输出 "   ⚠️ GitHub 原生 1 小时 TTL，无法提前撤销"
+                    输出 "   测试完请 unset GH_TOKEN"
+                    输出 ""
+                    输出 "   保存路径: 空 (JIT 凭证不持久化)"
+                否则:
+                    输出 "❌ JIT 流程完成但 env 文件未生成"
+                    保存路径 = 空
+            否则:
+                输出 "❌ JIT 申请失败，回退到无 PEM 模式"
+                保存路径 = 空
+
+        若 输入 == "N":
             保存路径 = 空
 
     是否为生产环境 = (保存路径 非空)

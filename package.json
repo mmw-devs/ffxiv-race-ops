@@ -10,6 +10,7 @@
     "validate": "node scripts/validate-data.js"
   },
   "devDependencies": {
+    "@larksuite/cli": "^1.0.72",
     "ajv": "^8.20.0"
   },
   "dependencies": {
