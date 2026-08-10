@@ -63,3 +63,4 @@ Cloudflare Pages 连接 GitHub 仓库。需配置：
 | Output directory | `dist` |
 
 push 到 `main` → 自动部署。push 到任意分支 → 自动生成预览链接。
+
