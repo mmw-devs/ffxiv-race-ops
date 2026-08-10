@@ -8,7 +8,6 @@
     "validate-op-log": "node scripts/validate-op-log.js"
   },
   "devDependencies": {
-    "@larksuite/cli": "^1.0.72",
     "ajv": "^8.20.0"
   }
 }
