@@ -243,7 +243,7 @@ function startPi(sessionKey: string): void {
   const pi: PiSession = { proc: null as any, ready: false, pending: new Map() };
   sessions.set(sessionKey, pi);
 
-  pi.proc = spawn(PI_BIN, ["--mode", "rpc", "--session-dir", sessionDir, "--name", `bot-${sessionKey.slice(-12)}`], {
+  pi.proc = spawn(PI_BIN, ["--mode", "rpc", "--session-dir", sessionDir], {
     cwd: PROJECT_DIR, stdio: ["pipe", "pipe", "pipe"],
     env: { ...process.env, LARK_BOT_RUNTIME: "1" },
     shell: IS_WIN,
