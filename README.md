@@ -1,66 +1,87 @@
-# FFXIV 高难首杀竞速网站
+# FFXIV 高难首杀竞速 — 运营仓库
 
-Final Fantasy XIV 世界首杀竞速排行聚合平台。追踪高难副本的首杀争夺战，提供队伍进度、选手直播、赛事速报一站式浏览。
+Final Fantasy XIV 世界首杀竞速排行平台的**运营仓库**。负责日常运营全流程：数据维护、Agent 自动化、构建部署。
 
-## 本地预览
+## 与开发仓库的分工
+
+| | 运营仓库（本仓库） | 开发仓库 |
+|---|---|---|
+| **GitHub** | `mmw-devs/ffxiv-race-ops` | `mmw-devs/ffxiv-race-stats` |
+| **主体** | 数据 + Agent + 工作流 + 部署 | 应用源码 + 构建 |
+| **高频改动** | `public/data.json` | `src/`、`schema/` |
+| **分支前缀** | `content/*` | `feature/*`、`fix/*` |
+| **触发角色** | PI Agent（代表运营人员） | 开发者本人 |
+
+## 日常运营流程
+
+```
+运营人员（飞书）
+   │
+   ▼
+运营 Agent（.pi/）接收指令
+   │
+   ▼ 调用 skill（update-team / add-news / add-broadcaster）
+   │
+   ▼ gh cli 创建 content/* 分支 → 修改 public/data.json → 开 PR
+   │
+   ▼ CI 校验（schema + 范围 + 操作日志）
+   │
+   ▼ Merge main
+   │
+   ▼ CF Pages 自动部署
+```
+
+## 部署架构
+
+```
+Dev Repo main（push src/ 改动）
+   ↓
+Dev CI：npm ci && npm run build → 产出 dist/
+   ↓
+Dev CI 推送 dist/ 到本仓库 main
+   ↓
+CF Pages 监听本仓库 main
+   ↓ Build command: cp public/data.json dist/data.json
+   ↓ Build output: dist/
+   ↓
+CDN ──→ 用户访问站点
+```
+
+## 本地校验
 
 ```bash
-npm install        # 仅首次
-npm run dev        # Astro 开发服务器 + HMR
+npm ci
+npm run validate          # 校验 public/data.json
+npm run validate-op-log   # 校验操作日志
 ```
 
-访问 `http://localhost:4321`。
+## 数据契约
 
-## 架构
+`public/data.json` 必须符合 `schema/*.json` 定义。PR 提交时 CI 自动校验。
 
-```
-运营人员 ──飞书──→ PI Agent ──→ GitHub ──→ Cloudflare Pages ──→ CDN
-开发者   ──→ Git / IDE ──→ GitHub ──→ Cloudflare Pages ──→ CDN
-```
+详细数据结构见 [schema/](./schema/)。
 
-运营人员通过 **飞书**（群聊或单聊，自然语言或 @ 机器人）指挥 PI Agent ——`pi-feishu` 扩展提供消息通道，Agent 回复与工具执行进度实时回传飞书。Agent 同时经 `feishu-mcp`（MCP server）具备读写飞书云文档的能力。
+## 运营 Agent 工具
 
-双轨模型：开发者和运营人员共享同一个 `main` 分支，通过不同的分支前缀和 PR 流程各司其职。
+本仓库配套的 PI Agent（`.pi/`）在运营模式下提供：
 
-| | 开发轨 | 运营轨 |
-|---|--------|--------|
-| **分支前缀** | `feature/*`、`fix/*` | `content/*` |
-| **变更对象** | `src/`、`schema/`、`constants.js`、CI | `public/data.json` 数据值 |
-| **操作者** | 开发者 | Agent（代表运营人员） |
-| **质量把关** | Code Review | 预览确认 |
-| **频率** | 低（周级别） | 高（每天多次） |
-| **文件保护** | CI 硬阻断 `feature/*` 修改 `public/data.json` | CI 硬阻断 `content/*` 修改其他文件 |
+| Skill | 用途 |
+|---|---|
+| `update-team` | 更新队伍攻略进度（phase、bossHP、isLive） |
+| `add-news` | 添加赛事速报 |
+| `add-broadcaster` | 管理赛事转播方 |
+| `content-pr` | 通用 PR 提交流程 |
 
-## 技术栈
-
-Astro 7 + Vue 3，组件化架构（13 个 SFC，scoped CSS 样式隔离）。OKLCH token 系统定义在 `BaseLayout.astro` 中。
-
-```
-src/
-├── pages/index.astro         # 入口
-├── layouts/BaseLayout.astro  # 全局布局 + tokens
-├── App.vue                   # 根组件（数据加载 + 分发）
-├── components/               # 13 个 Vue 组件
-├── composables/              # useTimer / useExpand
-public/
-└── data.json                 # 运营数据（纯 JSON）
-```
+详见 [`.pi/skills/`](./.pi/skills/)。
 
 ## 设计文档
 
 | 文档 | 内容 |
 |------|------|
-| [运营系统设计](docs/operations-system-design.md) | 双轨分支模型、权限体系、Agent 能力设计、CI 与质量保障 |
+| [运营系统设计](docs/operations-system-design.md) | 双轨分支模型、Agent 能力设计、CI 与质量保障 |
+| [.pi/SKILL.md](.pi/SKILL.md) | PI Agent 在本仓库的工作机制 |
 
-## 部署
+## 相关链接
 
-Cloudflare Pages 连接 GitHub 仓库。需配置：
-
-| 配置项 | 值 |
-|------|------|
-| Framework preset | **Astro** |
-| Build command | `npm run build` |
-| Output directory | `dist` |
-
-push 到 `main` → 自动部署。push 到任意分支 → 自动生成预览链接。
-
+- 站点：CF Pages 项目 URL（dashboard 查看）
+- 开发仓库：https://github.com/mmw-devs/ffxiv-race-stats
