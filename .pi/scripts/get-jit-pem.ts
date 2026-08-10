@@ -23,7 +23,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { writeFileSync, readFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
-const REPO = "mmw-devs/ffxiv-race-stats";
+const REPO = "mmw-devs/ffxiv-race-ops";
 const ARTIFACT_NAME = "jit-token";
 const MAX_WAIT_SECONDS = 120;
 const POLL_INTERVAL_SECONDS = 2;

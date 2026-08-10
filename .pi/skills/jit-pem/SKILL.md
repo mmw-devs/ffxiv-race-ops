@@ -140,10 +140,10 @@ rm -f /tmp/race-ops-jit-env.sh /tmp/race-ops-jit-download
 
 ```bash
 # 列出所有 JIT 申请
-gh issue list --repo mmw-devs/ffxiv-race-stats --label jit-audit --state all
+gh issue list --repo mmw-devs/ffxiv-race-ops --label jit-audit --state all
 
 # 查某人的申请历史
-gh issue list --repo mmw-devs/ffxiv-race-stats --label jit-audit --search "@username"
+gh issue list --repo mmw-devs/ffxiv-race-ops --label jit-audit --search "@username"
 ```
 
 ### issue 包含的信息
@@ -203,7 +203,7 @@ RACE_OPS_INSTALLATION_ID   = 144348445
 **审计查询**：
 
 ```bash
-gh issue list --repo mmw-devs/ffxiv-race-stats --label jit-audit --state all
+gh issue list --repo mmw-devs/ffxiv-race-ops --label jit-audit --state all
 ```
 
 ## 测试场景
