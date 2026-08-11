@@ -39,7 +39,8 @@ if (!process.env.HTTP_PROXY) {
 
 // ═══════════════ 日志 ═══════════════
 function log(msg: string) {
-  const ts = new Date().toISOString().slice(11, 19);
+  // 完整 ISO 8601（带日期）便于跨天、跨服务排查
+  const ts = new Date().toISOString();
   const line = `[${ts}] ${msg}`;
   console.log(line);
   try { appendFileSync(LOG_FILE, line + "\n"); } catch {}
@@ -77,8 +78,16 @@ function isAlive(pid: number): boolean {
 
 // ═══════════════ 表情 ═══════════════
 const EMOJI_READ = "WAVE";
+const EMOJI_WAITING = "OnIt";
 const EMOJI_THINKING = "THINKING";
 const EMOJI_DONE = "DONE";
+const EMOJI_ERROR = "ERROR";
+
+/** 任务对象最小可见字段（switchReaction 只用到这两个） */
+interface TaskReactionView {
+  msgId: string;
+  reactionId: string | null;
+}
 
 function addReaction(msgId: string, emoji: string): string | null {
   try {
@@ -98,24 +107,88 @@ function delReaction(msgId: string, reactionId: string): void {
   try { execSync(`"${CLI}" im reactions delete --as bot --params '${params}'`, { timeout: 5000, encoding: "utf-8", stdio: "ignore" }); } catch {}
 }
 
+/**
+ * 统一切换任务的表情：
+ *   1. 先 addReaction 拿新 reactionId（保证切换顺序：旧→新）
+ *   2. 成功后才 delReaction 旧的，避免新表情未生效前先移除旧表情
+ *   3. 失败只记日志，不阻断业务流程（表情失败仅影响视觉）
+ *
+ * 调用方需把返回的 reactionId 写回 task.reactionId，便于下次切换。
+ */
+function switchReaction(task: TaskReactionView, emoji: string): string | null {
+  const newId = addReaction(task.msgId, emoji);
+  if (!newId) {
+    log(`表情切换失败: msgId=${task.msgId.slice(-8)} emoji=${emoji}`);
+    return task.reactionId;
+  }
+  delReaction(task.msgId, task.reactionId ?? "");
+  task.reactionId = newId;
+  return newId;
+}
+
 // ═══════════════ 飞书回复 ═══════════════
+/** 飞书回复内置超时（在该时间内拿不到 message_id 则认为失败） */
+const REPLY_SEND_TIMEOUT_MS = 18_000;
+
+/** sendReplyGetId 结构化返回：不重试、不重发，失败走 ERROR */
+interface SendReplyResult {
+  ok: boolean;             // true = 拿到 replyId；false = 超时/解析失败/spawn 错误
+  replyId: string | null;  // 成功时为飞书 message_id
+  error?: string;          // 详细错误信息（仅 ok=false 时设）
+  timedOut?: boolean;      // true = 超时（与 error 并存或单独存在）
+}
+
 function sendReply(msgId: string, text: string, replyInThread = false): void {
   const args = ["im", "+messages-reply", "--as", "bot", "--message-id", msgId, "--text", text];
   if (replyInThread) args.push("--reply-in-thread");
-  spawn(CLI, args, { stdio: "ignore" }).on("error", (e) => log(`reply: ${e.message}`));
+  spawn(CLI, args, { stdio: "ignore" }).on("error", (e) => log(`reply fire-and-forget 失败: msgId=${msgId.slice(-8)} err=${e.message}`));
 }
 
-function sendReplyGetId(msgId: string, text: string, replyInThread = false): Promise<string | null> {
+/**
+ * 飞书回复并获取新消息 ID。
+ *   - 内置超时（REPLY_SEND_TIMEOUT_MS）：超时后 kill 子进程，结果不明确走 ERROR
+ *   - 响应解析失败：走 ERROR（不猜测）
+ *   - 拿不到 replyId：走 ERROR（不重发）
+ *   - 一律不重试：调用方根据 ok 决定 DONE/ERROR
+ */
+function sendReplyGetId(msgId: string, text: string, replyInThread = false): Promise<SendReplyResult> {
   return new Promise((resolve) => {
     const args = ["im", "+messages-reply", "--as", "bot", "--message-id", msgId, "--text", text, "--format", "json"];
     if (replyInThread) args.push("--reply-in-thread");
+
     let out = "";
+    let settled = false;
+
+    const finish = (r: SendReplyResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(r);
+    };
+
+    const timer = setTimeout(() => {
+      // 超时：拿不到结果不猜测，kill 子进程防泄漏
+      try { p.kill("SIGKILL"); } catch {}
+      finish({ ok: false, replyId: null, error: `timeout after ${REPLY_SEND_TIMEOUT_MS}ms`, timedOut: true });
+    }, REPLY_SEND_TIMEOUT_MS);
+
     const p = spawn(CLI, args, { stdio: ["ignore", "pipe", "pipe"] });
     p.stdout?.on("data", (d: Buffer) => { out += d.toString("utf-8"); });
-    p.on("close", () => {
-      try { resolve(JSON.parse(out).data?.message_id ?? null); } catch { resolve(null); }
+    p.on("close", (code) => {
+      if (settled) return; // 已超时结算
+      let parsed: any = null;
+      try { parsed = JSON.parse(out); } catch {}
+      const replyId = parsed?.data?.message_id;
+      if (replyId && typeof replyId === "string") {
+        finish({ ok: true, replyId });
+      } else {
+        const err = parsed?.msg || parsed?.error || `exit code=${code}, no message_id, stdout=${out.slice(0, 200)}`;
+        finish({ ok: false, replyId: null, error: String(err) });
+      }
     });
-    p.on("error", () => resolve(null));
+    p.on("error", (e) => {
+      finish({ ok: false, replyId: null, error: `spawn error: ${e.message}` });
+    });
   });
 }
 
@@ -151,6 +224,10 @@ const activeThreads = new Map<string, number>();
 const THREAD_TTL_MS = 30 * 60 * 1000;
 const seedMessages = new Set<string>();
 
+// 步骤 11：seenMessageIds 清理策略
+const SEEN_TTL_MS = 24 * 60 * 60 * 1000;  // 24h 过期
+const SEEN_MAX_SIZE = 5000;               // 容量上限
+
 function activateThread(tid: string) { activeThreads.set(tid, Date.now()); }
 function isThreadActive(tid: string) { return activeThreads.has(tid); }
 function threadKey(e: LarkEvent): string | null { return e.thread_id || e.root_id || null; }
@@ -159,6 +236,26 @@ setInterval(() => {
   const now = Date.now();
   for (const [tid, last] of activeThreads) { if (now - last > THREAD_TTL_MS) activeThreads.delete(tid); }
   if (seedMessages.size > 100) seedMessages.clear();
+
+  // 步骤 11：seenMessageIds 清理
+  //   - TTL 超过 24h 的过期条目制除
+  //   - 容量超 5000 的按插入顺序淘汰最旧（Map 迭代顺序 = 插入顺序）
+  for (const pi of sessions.values()) {
+    let evictedTtl = 0;
+    for (const [msgId, addedAt] of pi.seenMessageIds) {
+      if (now - addedAt > SEEN_TTL_MS) { pi.seenMessageIds.delete(msgId); evictedTtl++; }
+    }
+    let evictedLru = 0;
+    while (pi.seenMessageIds.size > SEEN_MAX_SIZE) {
+      const oldest = pi.seenMessageIds.keys().next().value;
+      if (oldest === undefined) break;
+      pi.seenMessageIds.delete(oldest);
+      evictedLru++;
+    }
+    if (evictedTtl > 0 || evictedLru > 0) {
+      log(`🧹 [seenMessageIds 清理] ttl=${evictedTtl} lru=${evictedLru} 剩=${pi.seenMessageIds.size}`);
+    }
+  }
 }, 60_000);
 
 // ═══════════════ 话题轮询 ═══════════════
@@ -189,7 +286,7 @@ async function pollActiveThreads(): Promise<void> {
           sender_id: msg.sender?.id || "unknown", message_id: msg.message_id,
           message_type: "text", content, create_time: msg.create_time || "",
           thread_id: tid, root_id: msg.root_id,
-        });
+        }, "poll");
       }
     } catch {}
   }
@@ -223,25 +320,80 @@ function formatPrompt(event: LarkEvent): string {
 
 // ═══════════════ 多 pi RPC 管理 ═══════════════
 
+/**
+ * 单条飞书消息在 lark-bot 侧的完整生命周期对象。
+ * - 创建时机：飞书事件入队（WS 或 poll）
+ * - 状态流转：waitingTasks → activeTask → 完成（DONE/ERROR）
+ * - 严格 1 对 1 绑定 activeTask，避免回复错位
+ */
+interface PendingTask {
+  promptId: string;          // f-<seq>-<msgId后8位>
+  msgId: string;             // 飞书消息 ID
+  prompt: string;            // 发送给 pi 的完整内容
+  reactionId: string | null; // 当前展示的反应 ID（可能是 WAVE/WAITING/THINKING）
+  replyInThread: boolean;
+  chatId: string | undefined;
+  threadId: string | undefined;
+  rootId: string | undefined;
+  source: "ws" | "poll";     // 消息来源（WS 实时 / 话题轮询）
+  createTime: string | undefined; // 飞书原始时间
+  attemptCount: number;      // prompt 投递尝试次数（success:false 时递增重试）
+}
+
+/** 单飞取回复文本的等待句柄（completeActiveTask 期间只有一个） */
+interface PendingResultFetch {
+  task: PendingTask;
+  expectedId: string;          // result-<promptId>
+  resolve: (text: string | null) => void;
+}
+
 interface PiSession {
   proc: ChildProcess;
   ready: boolean;
-  pending: Map<string, { msgId: string; reactionId: string | null; replyInThread: boolean }>;
+  /** 当前正在处理的任务（同一会话同一时间最多 1 个） */
+  activeTask: PendingTask | null;
+  /** FIFO 等待队列 */
+  waitingTasks: PendingTask[];
+  /** 已入队/已处理消息 ID（msgId → 首次加入时间戳 Date.now()，用于 TTL + 容量淘汰） */
+  seenMessageIds: Map<string, number>;
+  /** 正在取 last_assistant_text + 发回复（防重入） */
+  finishing: boolean;
+  /** 单飞取文本的等待句柄（completeActiveTask 期间最多 1 个） */
+  pendingResultFetch: PendingResultFetch | null;
 }
 const sessions = new Map<string, PiSession>();
 let eventSeq = 0;
 
 function startPi(sessionKey: string): void {
-  if (sessions.has(sessionKey)) return;
   const existing = sessions.get(sessionKey);
-  if (existing) { existing.proc.kill(); sessions.delete(sessionKey); }
 
+  // 已在运行：跳过
+  if (existing?.proc) {
+    log(`[pi:${sessionKey.slice(-12)}] 已在运行`);
+    return;
+  }
+
+  let pi: PiSession;
   const sessionDir = join(PROJECT_DIR, ".pi", "sessions", `bot-${sessionKey.replace(/:/g, "-")}`);
-  mkdirSync(sessionDir, { recursive: true });
+  if (existing) {
+    // 重启路径：保留 waitingTasks/seenMessageIds（activeTask/finishing 已被 exit 处理器清零）
+    pi = existing;
+    log(`[pi:${sessionKey.slice(-12)}] 重启（保留 waitingTasks=${pi.waitingTasks.length}, seen=${pi.seenMessageIds.size}）`);
+  } else {
+    // 首次启动：创建新 session
+    mkdirSync(sessionDir, { recursive: true });
+    pi = {
+      proc: null as any,
+      ready: false,
+      activeTask: null,
+      waitingTasks: [],
+      seenMessageIds: new Map(),
+      finishing: false,
+      pendingResultFetch: null,
+    };
+    sessions.set(sessionKey, pi);
+  }
   log(`[pi:${sessionKey.slice(-12)}] 启动...`);
-
-  const pi: PiSession = { proc: null as any, ready: false, pending: new Map() };
-  sessions.set(sessionKey, pi);
 
   pi.proc = spawn(PI_BIN, ["--mode", "rpc", "--session-dir", sessionDir], {
     cwd: PROJECT_DIR, stdio: ["pipe", "pipe", "pipe"],
@@ -250,9 +402,11 @@ function startPi(sessionKey: string): void {
   });
 
   pi.proc.on("error", (err) => {
-    log(`[pi:${sessionKey.slice(-12)}] spawn 失败: ${err.message}`);
+    log(`[pi:${sessionKey.slice(-12)}] spawn 失败: ${err.message}（5s 后重试，保留 waitingTasks=${pi.waitingTasks.length}）`);
     pi.ready = false;
-    sessions.delete(sessionKey);
+    // 与 exit handler 保持一致：保留 session，5s 后重启让 startPi 复用现有 pi
+    pi.proc = null as any;
+    setTimeout(() => startPi(sessionKey), 5000);
   });
 
   let buf = "";
@@ -272,10 +426,35 @@ function startPi(sessionKey: string): void {
 
   pi.proc.on("exit", (code) => {
     log(`[pi:${sessionKey.slice(-12)}] 退出 code=${code}`);
-    pi.ready = false; pi.proc = null as any; sessions.delete(sessionKey);
+
+    // 1. activeTask → ERROR 收尾（不回复飞书：pi 已挂，网络可能也不在状态）
+    if (pi.activeTask) {
+      const task = pi.activeTask;
+      log(`⛔ [${task.promptId}] pi 退出，activeTask 标记 ERROR (msgId=${task.msgId.slice(-8)} source=${task.source})`);
+      try { switchReaction(task, EMOJI_ERROR); } catch (e: any) {
+        log(`exit 时切换 ERROR 表情失败: ${e?.message?.slice(0, 80)}`);
+      }
+      pi.activeTask = null;
+    }
+
+    // 2. 释放单飞句柄（让 completeActiveTask 的 await 不再阻塞）
+    if (pi.pendingResultFetch) {
+      try { pi.pendingResultFetch.resolve(null); } catch {}
+      pi.pendingResultFetch = null;
+    }
+
+    // 3. 重置 finishing + ready
+    pi.finishing = false;
+    pi.ready = false;
+    pi.proc = null as any;
+
+    // 4. waitingTasks 保留（不删 sessions），让 get_state 就绪后补偿 promoteNext
+    log(`💾 保留 waitingTasks=${pi.waitingTasks.length}, seenMessageIds=${pi.seenMessageIds.size}，5s 后重启`);
+
     setTimeout(() => startPi(sessionKey), 5000);
   });
 
+  // 重启后重新探测 ready
   setTimeout(() => {
     if (pi.proc?.stdin) pi.proc.stdin.write('{"type":"get_state"}\n');
   }, 3000);
@@ -292,46 +471,223 @@ function handlePiEvent(sessionKey: string, event: Record<string, unknown>): void
       if (event.command === "get_state" && event.success) {
         pi.ready = true;
         log(`[pi:${sessionKey.slice(-12)}] 就绪`);
-      }
-      if (event.command === "get_last_assistant_text") {
-        handleReply(sessionKey, event as any);
+        // 重启补偿：队列有任务且无 activeTask，自动晋升
+        if (!pi.activeTask && pi.waitingTasks.length > 0) {
+          log(`🚀 重启就绪，补偿 promoteNext (depth=${pi.waitingTasks.length})`);
+          promoteNext(pi);
+        }
+      } else if (event.command === "prompt") {
+        // prompt 投递结果：success=true 保持 THINKING 等 agent_settled；success=false 按 attemptCount 决定重试或 ERROR
+        const id = (event as any).id as string | undefined;
+        if (!pi.activeTask) {
+          log(`⚠ [${sessionKey.slice(-12)}] prompt 响应但 activeTask 为空: id=${id ?? "?"}`);
+        } else if (pi.activeTask.promptId !== id) {
+          log(`⚠ [${sessionKey.slice(-12)}] prompt id 不匹配: 期望=${pi.activeTask.promptId} 收到=${id ?? "?"}`);
+        } else {
+          const task = pi.activeTask;
+          if (event.success) {
+            log(`✅ prompt 接受 promptId=${task.promptId} msgId=${task.msgId.slice(-8)} source=${task.source} attempt=${task.attemptCount}，等待 agent_settled`);
+          } else {
+            log(`❌ prompt 拒绝 promptId=${task.promptId} msgId=${task.msgId.slice(-8)} source=${task.source} attempt=${task.attemptCount}`);
+            if (task.attemptCount === 0) {
+              // 首次失败：重试，unshift 到队首保持原始顺序
+              task.attemptCount++;
+              switchReaction(task, EMOJI_WAITING);
+              pi.activeTask = null;
+              pi.waitingTasks.unshift(task);
+              log(`🔄 [${task.promptId}] 重试入队 (depth=${pi.waitingTasks.length})`);
+              promoteNext(pi);
+            } else {
+              // 二次失败：放弃
+              finishTaskWithError(pi, task, "prompt 被拒绝");
+            }
+          }
+        }
+      } else if (event.command === "get_last_assistant_text") {
+        // 单飞取文本响应：按 id 匹配（若响应未回显 id，按单飞规则用 pendingResultFetch）
+        if (pi.pendingResultFetch && pi.finishing) {
+          const fetch = pi.pendingResultFetch;
+          const text = (event as any).data?.text ?? null;
+          const id = (event as any).id;
+          if (id === undefined || id === fetch.expectedId) {
+            log(`📥 [${fetch.task.promptId}] 收到 get_last_assistant_text id=${id ?? "(无)"} text.len=${text?.length ?? 0}`);
+            fetch.resolve(text);
+            // 保留 pi.pendingResultFetch，由 completeActiveTask 在 await 返回后清理
+          } else {
+            log(`⚠ get_last_assistant_text id 不匹配: 期望=${fetch.expectedId} 收到=${id}`);
+          }
+        } else {
+          log(`⚠ 收到 get_last_assistant_text 但无 pendingResultFetch（已超时/已清理）`);
+        }
       }
       break;
     }
-    case "agent_settled":
     case "agent_end": {
-      const entries = [...pi.pending.entries()];
-      if (entries.length > 0) {
-        const [pid, pending] = entries[0];
-        pi.pending.delete(pid);
-        pi.pending.set("__current__", pending);
-        pi.proc?.stdin?.write('{"type":"get_last_assistant_text"}\n');
+      // agent_end 不再被消费，仅记录诊断信息（含 willRetry）
+      const willRetry = (event as any).willRetry;
+      const task = pi.activeTask;
+      log(`🔚 agent_end promptId=${task?.promptId ?? "?"} msgId=${task?.msgId?.slice(-8) ?? "?"} source=${task?.source ?? "?"} willRetry=${willRetry}（不消费、不回复、不晋升）`);
+      break;
+    }
+    case "agent_settled": {
+      // agent_settled = Agent 真正完成，发起 completeActiveTask
+      const task = pi.activeTask;
+      if (!task) {
+        log(`⚠ agent_settled 但 activeTask 为空`);
+        break;
       }
+      log(`🏁 agent_settled promptId=${task.promptId} msgId=${task.msgId.slice(-8)} source=${task.source}，开始 completeActiveTask`);
+      // 不 await：响应处理是同步路径，完成是异步后台运行
+      completeActiveTask(pi).catch((e) => log(`💥 completeActiveTask 异常: promptId=${task.promptId} err=${e?.message?.slice(0, 200)}`));
       break;
     }
   }
 }
 
-async function handleReply(sessionKey: string, event: { data?: { text: string | null } }): Promise<void> {
-  const pi = sessions.get(sessionKey);
-  if (!pi) return;
-  const pending = pi.pending.get("__current__");
-  pi.pending.delete("__current__");
-  if (!pending) return;
-
-  const text = event.data?.text?.trim();
-  delReaction(pending.msgId, pending.reactionId ?? "");
-  addReaction(pending.msgId, EMOJI_DONE);
-
-  const replyText = text || "处理完成，但未生成文本回复。";
-  const replyId = await sendReplyGetId(pending.msgId, replyText, pending.replyInThread);
-  if (replyId) { seedMessages.add(pending.msgId); seedMessages.add(replyId); }
-  log(`📤 [${sessionKey.slice(-12)}] ${replyText.slice(0, 50)}`);
-}
-
 // ═══════════════ 飞书事件处理 ═══════════════
 
-function handleLarkEvent(event: LarkEvent): void {
+/**
+ * 启动处理一个任务：占位 activeTask、切换到 THINKING 表情、向 pi 投递 prompt。
+ * 投递成功/失败由 pi RPC 的 prompt 响应决定（成功 → 等 agent_settled；失败 → attemptCount++ 重试）。
+ */
+function startTask(pi: PiSession, task: PendingTask): void {
+  pi.activeTask = task;
+  switchReaction(task, EMOJI_THINKING);
+  const line = JSON.stringify({ type: "prompt", id: task.promptId, message: task.prompt });
+  pi.proc.stdin?.write(line + "\n");
+  log(`🚀 startTask promptId=${task.promptId} msgId=${task.msgId.slice(-8)} source=${task.source} queue=${pi.waitingTasks.length}`);
+}
+
+/**
+ * 从 waitingTasks 队首取下一个任务启动。
+ *   - 有任务：startTask（自动占位 activeTask + 切表情 + 投 prompt）
+ *   - 队列空：activeTask 保持 null，会话进入空闲
+ *   - activeTask 非空时拒绝调用（防御性，避免覆盖正在处理的任务）
+ */
+function promoteNext(pi: PiSession): void {
+  if (pi.activeTask) {
+    log(`⚠ promoteNext 但 activeTask 非空: ${pi.activeTask.promptId}（跳过）`);
+    return;
+  }
+  const next = pi.waitingTasks.shift();
+  if (!next) {
+    log(`💤 队列空，session 空闲`);
+    return;
+  }
+  startTask(pi, next);
+}
+
+/**
+ * 任务异常结束（用于 prompt 二次被拒 / 其他本地不可恢复错误）：
+ *   ERROR 表情 → 结构化日志（promptId/msgId/source/reason）→ 飞书错误回复
+ *   → 若为 activeTask 则清空 + finishing=false + promoteNext
+ *
+ * 约束（已送 Agent 不得重放）：
+ *   - finishTaskWithError 调用点仅限 prompt 二次被拒（attempts > 0）。
+ *     Agent 内部阶段的错误统一走 completeActiveTask（agent_settled 后），
+ *     该路径不重发 prompt，也不重投该任务。
+ *   - 不再将 task 推回 waitingTasks，避免错误任务被重新 pop 启动。
+ */
+function finishTaskWithError(pi: PiSession, task: PendingTask, reason: string): void {
+  log(`⛔ [${task.promptId}] ERROR: msgId=${task.msgId.slice(-8)} source=${task.source} reason=${reason}`);
+  switchReaction(task, EMOJI_ERROR);
+  const errText = `❌ 处理失败：${reason}\n请重试或联系管理员。`;
+  try {
+    sendReply(task.msgId, errText, task.replyInThread);
+  } catch (e: any) {
+    log(`回复 ERROR 失败: ${e?.message?.slice(0, 80)}`);
+  }
+  if (pi.activeTask?.promptId === task.promptId) {
+    pi.activeTask = null;
+    pi.finishing = false; // 防御性：避免异常路径下 finishing 残留
+    promoteNext(pi);
+  } else {
+    log(`⚠ finishTaskWithError 时 activeTask 不匹配: active=${pi.activeTask?.promptId ?? "null"} task=${task.promptId}`);
+    // 即使不匹配，也确保 finishing 复位（极端并发场景的兜底）
+    pi.finishing = false;
+  }
+}
+
+/** 步骤 7：完成 activeTask 的统一收尾 */
+const TEXT_FETCH_TIMEOUT_MS = 20_000;
+
+/**
+ * 完成当前 activeTask（agent_settled 后调用）：
+ *   1. 取 task = activeTask；为空则 return
+ *   2. pi.finishing = true（防重入）
+ *   3. 发送 { type:"get_last_assistant_text", id:`result-<promptId>` }
+ *   4. 等待响应：按 id 匹配；若响应未回显 id，按"单飞"规则用 pendingResultFetch
+ *   5. 文本有效 → 异步发飞书回复（带超时）
+ *   6. 拿到 replyId → DONE；否则 ERROR
+ *   7. 无论成败：activeTask = null；finishing = false
+ *   8. promoteNext(pi)
+ */
+async function completeActiveTask(pi: PiSession): Promise<void> {
+  if (pi.finishing) {
+    log(`⚠ completeActiveTask 重入跳过`);
+    return;
+  }
+  const task = pi.activeTask;
+  if (!task) {
+    log(`⚠ completeActiveTask 但 activeTask 为空`);
+    return;
+  }
+  pi.finishing = true;
+
+  const fetchId = `result-${task.promptId}`;
+
+  // 3+4：发请求并 await 响应（或超时）
+  const fetched = new Promise<string | null>((resolve) => {
+    pi.pendingResultFetch = { task, expectedId: fetchId, resolve };
+  });
+  const timeoutHit = new Promise<"__TIMEOUT__">((resolve) =>
+    setTimeout(() => resolve("__TIMEOUT__"), TEXT_FETCH_TIMEOUT_MS)
+  );
+  pi.proc?.stdin?.write(JSON.stringify({ type: "get_last_assistant_text", id: fetchId }) + "\n");
+  log(`🔍 [${task.promptId}] 请求 get_last_assistant_text msgId=${task.msgId.slice(-8)} source=${task.source} fetchId=${fetchId} timeout=${TEXT_FETCH_TIMEOUT_MS}ms`);
+
+  const raw = await Promise.race([fetched, timeoutHit]);
+  pi.pendingResultFetch = null;
+  const text = (typeof raw === "string" && raw !== "__TIMEOUT__") ? raw.trim() : null;
+
+  // 5+6：处理文本 + 发回复
+  if (!text) {
+    const reason = raw === "__TIMEOUT__" ? "agent 返回文本超时" : "agent 未返回文本";
+    log(`⛔ [${task.promptId}] ERROR msgId=${task.msgId.slice(-8)} source=${task.source} reason=${reason}`);
+    switchReaction(task, EMOJI_ERROR);
+    try { sendReply(task.msgId, `❌ 处理失败：${reason}`, task.replyInThread); } catch (e: any) {
+      log(`回复 ERROR 失败: ${e?.message?.slice(0, 80)}`);
+    }
+  } else {
+    log(`📝 [${task.promptId}] 收到 agent 文本 msgId=${task.msgId.slice(-8)} source=${task.source} len=${text.length}`);
+    // 发送飞书回复（sendReplyGetId 内置超时，结果不明确走 ERROR + 日志，不重发）
+    const result = await sendReplyGetId(task.msgId, text, task.replyInThread);
+    if (result.ok && result.replyId) {
+      log(`✅ [${task.promptId}] DONE msgId=${task.msgId.slice(-8)} source=${task.source} replyId=${result.replyId.slice(-8)} text.len=${text.length} content="${text.slice(0, 50)}"`);
+      switchReaction(task, EMOJI_DONE);
+      seedMessages.add(task.msgId);
+      seedMessages.add(result.replyId);
+    } else {
+      const reason = result.timedOut ? `回复超时（${REPLY_SEND_TIMEOUT_MS}ms）` : (result.error || "未知错误");
+      log(`⛔ [${task.promptId}] ERROR msgId=${task.msgId.slice(-8)} source=${task.source} timedOut=${result.timedOut ?? false} reason=${reason}`);
+      switchReaction(task, EMOJI_ERROR);
+    }
+  }
+
+  // 7+8：清理 + 晋升
+  pi.activeTask = null;
+  pi.finishing = false;
+  promoteNext(pi);
+}
+
+/**
+ * 飞书事件统一入口（WS 实时 + 话题轮询共用）。
+ *   1. 路由 + shouldHandle 过滤
+ *   2. seenMessageIds 单次运行内去重（防 WS+poll 重复）
+ *   3. 创建 PendingTask，初始表情 WAVE
+ *   4. 分流：activeTask 空 → 立即 startTask；否则 → 表情 WAITING + push 等待队列
+ */
+function handleLarkEvent(event: LarkEvent, source: "ws" | "poll"): void {
   if (event.chat_id) knownChatIds.add(event.chat_id);
   if (!shouldHandle(event)) return;
 
@@ -342,17 +698,41 @@ function handleLarkEvent(event: LarkEvent): void {
   const tid = threadKey(event);
   if (tid) { activateThread(tid); }
 
-  log(`📩 [${key.slice(-12)}] ${event.content.slice(0, 40)}`);
+  // 1. 统一去重（单次运行内）
+  if (pi.seenMessageIds.has(event.message_id)) {
+    log(`⏭ [${key.slice(-12)}] 重复消息跳过: msgId=${event.message_id.slice(-8)} source=${source}`);
+    return;
+  }
+  pi.seenMessageIds.set(event.message_id, Date.now());
 
-  const readReaction = addReaction(event.message_id, EMOJI_READ);
+  // 2. 创建 task
   const promptId = `f-${++eventSeq}-${event.message_id.slice(-8)}`;
+  const task: PendingTask = {
+    promptId,
+    msgId: event.message_id,
+    prompt: formatPrompt(event),
+    reactionId: null,
+    replyInThread: !!tid,
+    chatId: event.chat_id,
+    threadId: event.thread_id,
+    rootId: event.root_id,
+    source,
+    createTime: event.create_time,
+    attemptCount: 0,
+  };
 
-  pi.pending.set(promptId, { msgId: event.message_id, reactionId: readReaction, replyInThread: !!tid });
-  delReaction(event.message_id, readReaction ?? "");
-  const think = addReaction(event.message_id, EMOJI_THINKING);
-  pi.pending.set(promptId, { msgId: event.message_id, reactionId: think, replyInThread: !!tid });
+  // 3. WAVE
+  task.reactionId = addReaction(event.message_id, EMOJI_READ);
+  log(`📩 [${key.slice(-12)}] 入队 msgId=${event.message_id.slice(-8)} promptId=${promptId} source=${source} queue=${pi.waitingTasks.length} active=${pi.activeTask?.promptId ?? "null"} content="${event.content.slice(0, 40)}"`);
 
-  pi.proc.stdin?.write(JSON.stringify({ type: "prompt", id: promptId, message: formatPrompt(event) }) + "\n");
+  // 4. 分流
+  if (pi.activeTask === null) {
+    startTask(pi, task);
+  } else {
+    switchReaction(task, EMOJI_WAITING);
+    pi.waitingTasks.push(task);
+    log(`⏳ [${promptId}] WAITING 分支 msgId=${task.msgId.slice(-8)} source=${task.source} depth=${pi.waitingTasks.length}`);
+  }
 }
 
 // ═══════════════ lark-cli 事件流 ═══════════════
@@ -368,7 +748,7 @@ function startLarkEvents(): ChildProcess {
     while ((idx = buf.indexOf("\n")) !== -1) {
       const line = buf.slice(0, idx); buf = buf.slice(idx + 1);
       if (!line.trim()) continue;
-      try { handleLarkEvent(JSON.parse(line)); } catch {}
+      try { handleLarkEvent(JSON.parse(line), "ws"); } catch {}
     }
   });
 
