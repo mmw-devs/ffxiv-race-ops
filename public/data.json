@@ -608,8 +608,8 @@
       "id": "t11",
       "name": "[队伍名 11]",
       "rank": 11,
-      "bossHP": 100,
-      "phase": "P1",
+      "bossHP": 0.5,
+      "phase": "P3",
       "region": "EU",
       "isLive": false,
       "players": [
@@ -901,6 +901,12 @@
     }
   ],
   "news": [
+    {
+      "id": "n6",
+      "time": "2026-10-10T08:25:35Z",
+      "text": "队伍11进入P3，boss HP剩余0.5%。",
+      "urgent": false
+    },
     {
       "id": "n1",
       "time": "2026-10-07T03:41:12Z",
