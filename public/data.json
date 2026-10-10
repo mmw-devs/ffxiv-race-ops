@@ -251,9 +251,68 @@
       ]
     },
     {
+      "id": "t11",
+      "name": "[队伍名 11]",
+      "rank": 5,
+      "bossHP": 0.5,
+      "phase": "P3",
+      "region": "EU",
+      "isLive": false,
+      "players": [
+        {
+          "job": "GNB",
+          "role": "tank",
+          "stream": "#",
+          "streaming": false
+        },
+        {
+          "job": "DRK",
+          "role": "tank",
+          "stream": "#",
+          "streaming": false
+        },
+        {
+          "job": "SGE",
+          "role": "healer",
+          "stream": "#",
+          "streaming": false
+        },
+        {
+          "job": "AST",
+          "role": "healer",
+          "stream": "#",
+          "streaming": false
+        },
+        {
+          "job": "RPR",
+          "role": "dps",
+          "stream": "#",
+          "streaming": false
+        },
+        {
+          "job": "VPR",
+          "role": "dps",
+          "stream": "#",
+          "streaming": false
+        },
+        {
+          "job": "SMN",
+          "role": "dps",
+          "stream": "#",
+          "streaming": false
+        },
+        {
+          "job": "BRD",
+          "role": "dps",
+          "stream": "#",
+          "streaming": false
+        }
+      ]
+    },
+    {
       "id": "t5",
       "name": "[队伍名 5]",
-      "rank": 5,
+      "rank": 6,
       "bossHP": 52.1,
       "phase": "P3",
       "region": "NA",
@@ -312,7 +371,7 @@
     {
       "id": "t6",
       "name": "[队伍名 6]",
-      "rank": 6,
+      "rank": 7,
       "bossHP": 67.5,
       "phase": "P2",
       "region": "EU",
@@ -371,7 +430,7 @@
     {
       "id": "t7",
       "name": "[队伍名 7]",
-      "rank": 7,
+      "rank": 8,
       "bossHP": 78.4,
       "phase": "P2",
       "region": "JP",
@@ -430,7 +489,7 @@
     {
       "id": "t8",
       "name": "[队伍名 8]",
-      "rank": 8,
+      "rank": 9,
       "bossHP": 21,
       "phase": "P1",
       "region": "EU",
@@ -489,7 +548,7 @@
     {
       "id": "t9",
       "name": "[队伍名 9]",
-      "rank": 9,
+      "rank": 10,
       "bossHP": 98.6,
       "phase": "P1",
       "region": "OC",
@@ -548,7 +607,7 @@
     {
       "id": "t10",
       "name": "[队伍名 10]",
-      "rank": 10,
+      "rank": 11,
       "bossHP": 100,
       "phase": "P1",
       "region": "NA",
@@ -598,65 +657,6 @@
         },
         {
           "job": "DNC",
-          "role": "dps",
-          "stream": "#",
-          "streaming": false
-        }
-      ]
-    },
-    {
-      "id": "t11",
-      "name": "[队伍名 11]",
-      "rank": 11,
-      "bossHP": 100,
-      "phase": "P1",
-      "region": "EU",
-      "isLive": false,
-      "players": [
-        {
-          "job": "GNB",
-          "role": "tank",
-          "stream": "#",
-          "streaming": false
-        },
-        {
-          "job": "DRK",
-          "role": "tank",
-          "stream": "#",
-          "streaming": false
-        },
-        {
-          "job": "SGE",
-          "role": "healer",
-          "stream": "#",
-          "streaming": false
-        },
-        {
-          "job": "AST",
-          "role": "healer",
-          "stream": "#",
-          "streaming": false
-        },
-        {
-          "job": "RPR",
-          "role": "dps",
-          "stream": "#",
-          "streaming": false
-        },
-        {
-          "job": "VPR",
-          "role": "dps",
-          "stream": "#",
-          "streaming": false
-        },
-        {
-          "job": "SMN",
-          "role": "dps",
-          "stream": "#",
-          "streaming": false
-        },
-        {
-          "job": "BRD",
           "role": "dps",
           "stream": "#",
           "streaming": false
@@ -901,6 +901,12 @@
     }
   ],
   "news": [
+    {
+      "id": "n6",
+      "time": "2026-10-10T08:25:35Z",
+      "text": "队伍11进入P3，boss HP剩余0.5%。",
+      "urgent": false
+    },
     {
       "id": "n1",
       "time": "2026-10-07T03:41:12Z",
