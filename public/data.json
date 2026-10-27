@@ -27,7 +27,7 @@
           "job": "DRK",
           "role": "tank",
           "stream": "https://live.bilibili.com/5225",
-          "streaming": true
+          "streaming": false
         },
         {
           "job": "GNB",
