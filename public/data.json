@@ -72,7 +72,6 @@
       "bossHP": 0,
       "phase": "CLEAR",
       "region": "NA",
-      "isLive": true,
       "players": [
         {
           "job": "DRK",
@@ -131,7 +130,6 @@
       "bossHP": 18.3,
       "phase": "P4",
       "region": "JP",
-      "isLive": true,
       "players": [
         {
           "job": "PLD",
@@ -190,7 +188,6 @@
       "bossHP": 62,
       "phase": "P4",
       "region": "JP",
-      "isLive": true,
       "players": [
         {
           "job": "PLD",
@@ -249,7 +246,6 @@
       "bossHP": 90,
       "phase": "P4",
       "region": "EU",
-      "isLive": true,
       "players": [
         {
           "job": "WAR",
@@ -308,7 +304,6 @@
       "bossHP": 0.5,
       "phase": "P3",
       "region": "EU",
-      "isLive": false,
       "players": [
         {
           "job": "GNB",
@@ -367,7 +362,6 @@
       "bossHP": 48.6,
       "phase": "P3",
       "region": "NA",
-      "isLive": true,
       "players": [
         {
           "job": "DRK",
@@ -426,7 +420,6 @@
       "bossHP": 67.5,
       "phase": "P2",
       "region": "EU",
-      "isLive": true,
       "players": [
         {
           "job": "GNB",
@@ -485,7 +478,6 @@
       "bossHP": 78.4,
       "phase": "P2",
       "region": "JP",
-      "isLive": true,
       "players": [
         {
           "job": "PLD",
@@ -544,7 +536,6 @@
       "bossHP": 21,
       "phase": "P1",
       "region": "EU",
-      "isLive": true,
       "players": [
         {
           "job": "DRK",
@@ -603,7 +594,6 @@
       "bossHP": 98.6,
       "phase": "P1",
       "region": "OC",
-      "isLive": true,
       "players": [
         {
           "job": "DRK",
@@ -662,7 +652,6 @@
       "bossHP": 100,
       "phase": "P1",
       "region": "NA",
-      "isLive": true,
       "players": [
         {
           "job": "PLD",
@@ -721,7 +710,6 @@
       "bossHP": 100,
       "phase": "P1",
       "region": "JP",
-      "isLive": false,
       "players": [
         {
           "job": "PLD",
@@ -780,7 +768,6 @@
       "bossHP": 100,
       "phase": "P1",
       "region": "NA",
-      "isLive": false,
       "players": [
         {
           "job": "DRK",
@@ -839,7 +826,6 @@
       "bossHP": 100,
       "phase": "P1",
       "region": "OC",
-      "isLive": false,
       "players": [
         {
           "job": "WAR",
@@ -898,7 +884,6 @@
       "bossHP": 100,
       "phase": "P1",
       "region": "EU",
-      "isLive": false,
       "players": [
         {
           "job": "GNB",
