@@ -20,7 +20,7 @@
         "name": "零式 4 层"
       }
     ],
-    "startTime": "2026-11-11T12:00:00Z",
+    "startTime": "-",
     "status": "upcoming"
   },
   "content": {
@@ -74,98 +74,7 @@
       }
     }
   },
-  "teams": [
-    {
-      "id": "t1",
-      "name": "队伍1",
-      "rank": 1,
-      "bossHP": 100,
-      "phase": "M1S-P1",
-      "region": "CN",
-      "players": [
-        { "job": "PLD", "role": "tank", "stream": "#", "streaming": false },
-        { "job": "WAR", "role": "tank", "stream": "#", "streaming": false },
-        { "job": "WHM", "role": "healer", "stream": "#", "streaming": false },
-        { "job": "SCH", "role": "healer", "stream": "#", "streaming": false },
-        { "job": "DRG", "role": "dps", "stream": "#", "streaming": false },
-        { "job": "NIN", "role": "dps", "stream": "#", "streaming": false },
-        { "job": "BRD", "role": "dps", "stream": "#", "streaming": false },
-        { "job": "SMN", "role": "dps", "stream": "#", "streaming": false }
-      ]
-    },
-    {
-      "id": "t2",
-      "name": "队伍2",
-      "rank": 2,
-      "bossHP": 100,
-      "phase": "M1S-P1",
-      "region": "CN",
-      "players": [
-        { "job": "PLD", "role": "tank", "stream": "#", "streaming": false },
-        { "job": "WAR", "role": "tank", "stream": "#", "streaming": false },
-        { "job": "WHM", "role": "healer", "stream": "#", "streaming": false },
-        { "job": "SCH", "role": "healer", "stream": "#", "streaming": false },
-        { "job": "DRG", "role": "dps", "stream": "#", "streaming": false },
-        { "job": "NIN", "role": "dps", "stream": "#", "streaming": false },
-        { "job": "BRD", "role": "dps", "stream": "#", "streaming": false },
-        { "job": "SMN", "role": "dps", "stream": "#", "streaming": false }
-      ]
-    },
-    {
-      "id": "t3",
-      "name": "队伍3",
-      "rank": 3,
-      "bossHP": 100,
-      "phase": "M1S-P1",
-      "region": "CN",
-      "players": [
-        { "job": "PLD", "role": "tank", "stream": "#", "streaming": false },
-        { "job": "WAR", "role": "tank", "stream": "#", "streaming": false },
-        { "job": "WHM", "role": "healer", "stream": "#", "streaming": false },
-        { "job": "SCH", "role": "healer", "stream": "#", "streaming": false },
-        { "job": "DRG", "role": "dps", "stream": "#", "streaming": false },
-        { "job": "NIN", "role": "dps", "stream": "#", "streaming": false },
-        { "job": "BRD", "role": "dps", "stream": "#", "streaming": false },
-        { "job": "SMN", "role": "dps", "stream": "#", "streaming": false }
-      ]
-    },
-    {
-      "id": "t4",
-      "name": "队伍4",
-      "rank": 4,
-      "bossHP": 100,
-      "phase": "M1S-P1",
-      "region": "CN",
-      "players": [
-        { "job": "PLD", "role": "tank", "stream": "#", "streaming": false },
-        { "job": "WAR", "role": "tank", "stream": "#", "streaming": false },
-        { "job": "WHM", "role": "healer", "stream": "#", "streaming": false },
-        { "job": "SCH", "role": "healer", "stream": "#", "streaming": false },
-        { "job": "DRG", "role": "dps", "stream": "#", "streaming": false },
-        { "job": "NIN", "role": "dps", "stream": "#", "streaming": false },
-        { "job": "BRD", "role": "dps", "stream": "#", "streaming": false },
-        { "job": "SMN", "role": "dps", "stream": "#", "streaming": false }
-      ]
-    },
-    {
-      "id": "t5",
-      "name": "队伍5",
-      "rank": 5,
-      "bossHP": 100,
-      "phase": "M1S-P1",
-      "region": "CN",
-      "players": [
-        { "job": "PLD", "role": "tank", "stream": "#", "streaming": false },
-        { "job": "WAR", "role": "tank", "stream": "#", "streaming": false },
-        { "job": "WHM", "role": "healer", "stream": "#", "streaming": false },
-        { "job": "SCH", "role": "healer", "stream": "#", "streaming": false },
-        { "job": "DRG", "role": "dps", "stream": "#", "streaming": false },
-        { "job": "NIN", "role": "dps", "stream": "#", "streaming": false },
-        { "job": "BRD", "role": "dps", "stream": "#", "streaming": false },
-        { "job": "SMN", "role": "dps", "stream": "#", "streaming": false }
-      ]
-    }
-  ],
+  "teams": [],
   "news": [],
   "broadcasters": [],
   "notices": [
